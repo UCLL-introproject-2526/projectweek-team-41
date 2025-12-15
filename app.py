@@ -1,4 +1,5 @@
 import sys
+import os
 import pygame
 from outside import draw_game_screen
 
@@ -7,7 +8,7 @@ pygame.init()
 
 WIDTH, HEIGHT = 900, 600
 SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Projectweek - Menu")
+pygame.display.set_caption("Merge Casino - Menu")
 
 CLOCK = pygame.time.Clock()
 FONT = pygame.font.SysFont(None, 48)
@@ -55,8 +56,21 @@ def main():
     # Scenes: "menu" of "game"
     scene = "menu"
 
-    start_btn = Button(pygame.Rect(WIDTH // 2 - 140, 260, 280, 60), "Start game")
-    leave_btn = Button(pygame.Rect(WIDTH // 2 - 140, 340, 280, 60), "Leave")
+    # Load menu background image
+    menu_bg = None
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        menu_bg_path = os.path.join(base_dir, "img", "mainmenu.png")
+        menu_bg = pygame.image.load(menu_bg_path).convert_alpha()
+        menu_bg = pygame.transform.smoothscale(menu_bg, (WIDTH, HEIGHT))
+    except Exception:
+        menu_bg = None
+
+    btn_width, btn_height = 200, 60
+    spacing = 40
+    start_btn_x = (WIDTH - (btn_width * 2 + spacing)) // 2
+    start_btn = Button(pygame.Rect(start_btn_x, 475, btn_width, btn_height), "Start game")
+    leave_btn = Button(pygame.Rect(start_btn_x + btn_width + spacing, 475, btn_width, btn_height), "Leave")
 
     running = True
     while running:
@@ -84,13 +98,15 @@ def main():
         SCREEN.fill(BG)
 
         if scene == "menu":
-            draw_center_text(SCREEN, "Main Menu", 150, font=FONT)
+            if menu_bg is not None:
+                SCREEN.blit(menu_bg, (0, 0))
+            draw_center_text(SCREEN, "Main Menu", 180, font=FONT)
             start_btn.draw(SCREEN, mouse_pos)
             leave_btn.draw(SCREEN, mouse_pos)
             draw_center_text(
                 SCREEN,
                 "Tip: ESC = afsluiten (menu) / terug (game)",
-                520,
+                580,
                 font=FONT_TIP,
                 color=(200, 200, 200),
             )
