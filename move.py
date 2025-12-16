@@ -26,7 +26,7 @@ class Player:
 
 		self._is_moving = False
 
-	def _get_move_vector_from_keys(self, keys: pygame.key.ScancodeWrapper) -> tuple[int, int]:
+	def _get_move_vector_from_keys(self, keys: pygame.key.ScancodeWrapper) -> tuple[float, float]:
 		# WASD (QWERTY) + ZQSD (AZERTY)
 		up = keys[pygame.K_w] or keys[pygame.K_z]
 		down = keys[pygame.K_s]
@@ -36,13 +36,12 @@ class Player:
 		dx = (1 if right else 0) - (1 if left else 0)
 		dy = (1 if down else 0) - (1 if up else 0)
 
-		# Pokémon-achtig: geen diagonaal; kies één as.
+		# Diagonaal toelaten, maar snelheid normaliseren zodat diagonaal niet sneller is.
 		if dx != 0 and dy != 0:
-			# Prioriteit: laatste horizontale input winnen voelt meestal OK.
-			# Maar zonder input-history: pak horizontaal.
-			dy = 0
+			inv_len = (2.0 ** 0.5) / 2.0  # 1/sqrt(2)
+			return dx * inv_len, dy * inv_len
 
-		return dx, dy
+		return float(dx), float(dy)
 
 	def _resolve_circle_rect_collision(self, rect: pygame.Rect) -> None:
 		# Push the circle out of the rectangle if overlapping.
