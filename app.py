@@ -3,6 +3,7 @@ import os
 import pygame
 from loading import draw_game_screen
 from move import Player
+from testscene import draw_test_scene
 
 # Initialize Pygame
 pygame.init()
@@ -62,6 +63,23 @@ BTN_TEXT = (255, 255, 255)
 LOADING_DURATION_SECONDS = 3.0
 
 
+def _circle_rect_distance(cx: float, cy: float, rect: pygame.Rect) -> float:
+    closest_x = min(max(cx, rect.left), rect.right)
+    closest_y = min(max(cy, rect.top), rect.bottom)
+    dx = cx - closest_x
+    dy = cy - closest_y
+    return (dx * dx + dy * dy) ** 0.5
+
+
+def _player_can_interact(player: Player | None, rects: list[pygame.Rect], near_px: float) -> bool:
+    if player is None:
+        return False
+    for r in rects:
+        if _circle_rect_distance(player.x, player.y, r) <= near_px:
+            return True
+    return False
+
+
 class Button:
     def __init__(self, rect: pygame.Rect, text: str):
         self.rect = rect
@@ -116,6 +134,13 @@ def main():
     start_btn = Button(pygame.Rect(start_btn_x, 475, btn_width, btn_height), "Start game")
     leave_btn = Button(pygame.Rect(start_btn_x + btn_width + spacing, 475, btn_width, btn_height), "Leave")
 
+    # 2 interactie-vierkanten aan de rand
+    interact_rects = [
+        pygame.Rect(30, 80, 50, 50),
+        pygame.Rect(BASE_WIDTH - 80, BASE_HEIGHT - 120, 50, 50),
+    ]
+    interact_near_px = 22.0
+
     running = True
     while running:
         dt = CLOCK.tick(60) / 1000.0
@@ -141,12 +166,19 @@ def main():
                 pygame.display.set_caption("Merge Casino")
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                if scene in ("game", "loading"):
+                if scene == "testscene":
+                    # Terug naar de blauwe map (game) i.p.v. menu
+                    scene = "game"
+                elif scene in ("game", "loading"):
                     scene = "menu"
                     player = None
                     loading_elapsed = 0.0
                 else:
                     running = False
+
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_e:
+                if scene == "game" and _player_can_interact(player, interact_rects, interact_near_px):
+                    scene = "testscene"
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if scene == "menu":
@@ -175,6 +207,9 @@ def main():
                 scene = "game"
                 player = Player((BASE_WIDTH // 2, BASE_HEIGHT // 2))
 
+        elif scene == "testscene":
+            draw_test_scene(canvas, font=FONT)
+
         else:  # scene == "game"
             # Map = blauwe vlakte; personage = bol.
             canvas.fill((40, 120, 220))
@@ -183,8 +218,24 @@ def main():
                 player = Player((BASE_WIDTH // 2, BASE_HEIGHT // 2))
 
             keys = pygame.key.get_pressed()
-            player.update(dt, keys, canvas.get_rect())
+            player.update(dt, keys, canvas.get_rect(), obstacles=interact_rects)
             player.draw(canvas)
+
+            # Interactie-vierkanten
+            for r in interact_rects:
+                pygame.draw.rect(canvas, (30, 30, 30), r)
+                pygame.draw.rect(canvas, (255, 255, 255), r, width=2)
+
+            # Popup: toon 'E' als je dichtbij staat
+            if _player_can_interact(player, interact_rects, interact_near_px):
+                popup = pygame.Rect(0, 0, 26, 26)
+                popup.center = (int(player.x), int(player.y - (player.radius + 18)))
+                popup.clamp_ip(canvas.get_rect())
+                pygame.draw.rect(canvas, (20, 20, 25), popup, border_radius=4)
+                pygame.draw.rect(canvas, (255, 255, 255), popup, width=2, border_radius=4)
+                e_surf = FONT_TIP.render("E", True, (255, 255, 255))
+                e_rect = e_surf.get_rect(center=popup.center)
+                canvas.blit(e_surf, e_rect)
 
         _present(canvas, window)
         pygame.display.flip()
