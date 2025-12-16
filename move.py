@@ -27,11 +27,11 @@ class Player:
 		self._is_moving = False
 
 	def _get_move_vector_from_keys(self, keys: pygame.key.ScancodeWrapper) -> tuple[float, float]:
-		# WASD (QWERTY) + ZQSD (AZERTY)
-		up = keys[pygame.K_w] or keys[pygame.K_z]
-		down = keys[pygame.K_s]
-		left = keys[pygame.K_a] or keys[pygame.K_q]
-		right = keys[pygame.K_d]
+		# WASD (QWERTY) + ZQSD (AZERTY) + pijltjestoetsen
+		up = keys[pygame.K_w] or keys[pygame.K_z] or keys[pygame.K_UP]
+		down = keys[pygame.K_s] or keys[pygame.K_DOWN]
+		left = keys[pygame.K_a] or keys[pygame.K_q] or keys[pygame.K_LEFT]
+		right = keys[pygame.K_d] or keys[pygame.K_RIGHT]
 
 		dx = (1 if right else 0) - (1 if left else 0)
 		dy = (1 if down else 0) - (1 if up else 0)
