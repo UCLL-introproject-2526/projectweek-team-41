@@ -1,7 +1,7 @@
 import sys
 import os
 import pygame
-from outside import draw_game_screen
+from loading import draw_game_screen
 
 # Initialize Pygame
 pygame.init()
