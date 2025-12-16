@@ -97,7 +97,7 @@ def main():
     loading_elapsed = 0.0
 
     window = pygame.display.set_mode((BASE_WIDTH, BASE_HEIGHT), pygame.RESIZABLE)
-    pygame.display.set_caption("Merge Casino - Menu")
+    pygame.display.set_caption("Merge Casino")
     canvas = pygame.Surface((BASE_WIDTH, BASE_HEIGHT))
     is_fullscreen = False
 
@@ -138,7 +138,7 @@ def main():
                     window = pygame.display.set_mode((info.current_w, info.current_h), pygame.FULLSCREEN)
                 else:
                     window = pygame.display.set_mode((BASE_WIDTH, BASE_HEIGHT), pygame.RESIZABLE)
-                pygame.display.set_caption("Merge Casino - Menu")
+                pygame.display.set_caption("Merge Casino")
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 if scene in ("game", "loading"):
