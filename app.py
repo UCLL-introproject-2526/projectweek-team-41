@@ -43,7 +43,7 @@ def _present(canvas: pygame.Surface, window: pygame.Surface) -> None:
         return
     scaled = pygame.transform.smoothscale(canvas, render_size)
     window.blit(scaled, (offset_x, offset_y))
-pygame.display.set_caption("Merge Casino - Menu")
+pygame.display.set_caption("Merge Casino")
 
 CLOCK = pygame.time.Clock()
 FONT = pygame.font.SysFont(None, 48)
