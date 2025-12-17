@@ -1,5 +1,7 @@
 import sys
 import os
+import json
+import random
 import pygame
 from loading import draw_game_screen
 from move import Player
@@ -8,8 +10,33 @@ from roulette import draw_roulette_scene, spin_roulette, reset_roulette, change_
 
 # Initialize Pygame
 pygame.init()
+pygame.mixer.init()
 
 BASE_WIDTH, BASE_HEIGHT = 900, 600
+SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+
+
+def _load_settings() -> dict:
+    """Load settings from file, or return defaults."""
+    defaults = {"music_volume": 100}
+    try:
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, "r") as f:
+                data = json.load(f)
+                # Merge with defaults to ensure all keys exist
+                return {**defaults, **data}
+    except Exception:
+        pass
+    return defaults
+
+
+def _save_settings(settings: dict) -> None:
+    """Save settings to file."""
+    try:
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(settings, f, indent=2)
+    except Exception as e:
+        print(f"Could not save settings: {e}")
 
 
 def _get_letterbox_mapping(window_size: tuple[int, int]) -> tuple[float, int, int]:
@@ -102,6 +129,61 @@ class Button:
         return self.rect.collidepoint(mouse_pos)
 
 
+class Slider:
+    def __init__(self, rect: pygame.Rect, min_val: int = 0, max_val: int = 100, value: int = 100):
+        self.rect = rect
+        self.min_val = min_val
+        self.max_val = max_val
+        self.value = value
+        self.dragging = False
+    
+    def get_knob_x(self) -> int:
+        ratio = (self.value - self.min_val) / (self.max_val - self.min_val)
+        return int(self.rect.left + ratio * self.rect.width)
+    
+    def is_hovered(self, mouse_pos) -> bool:
+        knob_rect = pygame.Rect(self.get_knob_x() - 10, self.rect.centery - 12, 20, 24)
+        return self.rect.collidepoint(mouse_pos) or knob_rect.collidepoint(mouse_pos)
+    
+    def handle_event(self, event, mouse_pos) -> bool:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.is_hovered(mouse_pos):
+                self.dragging = True
+                self._update_value(mouse_pos)
+                return True
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self.dragging = False
+        elif event.type == pygame.MOUSEMOTION and self.dragging:
+            self._update_value(mouse_pos)
+            return True
+        return False
+    
+    def _update_value(self, mouse_pos):
+        x = mouse_pos[0]
+        x = max(self.rect.left, min(self.rect.right, x))
+        ratio = (x - self.rect.left) / self.rect.width
+        self.value = int(self.min_val + ratio * (self.max_val - self.min_val))
+    
+    def draw(self, surface: pygame.Surface, mouse_pos):
+        # Track background
+        pygame.draw.rect(surface, (50, 50, 60), self.rect, border_radius=6)
+        
+        # Filled portion
+        filled_width = self.get_knob_x() - self.rect.left
+        if filled_width > 0:
+            filled_rect = pygame.Rect(self.rect.left, self.rect.top, filled_width, self.rect.height)
+            pygame.draw.rect(surface, (80, 140, 200), filled_rect, border_radius=6)
+        
+        # Border
+        pygame.draw.rect(surface, (100, 100, 120), self.rect, width=2, border_radius=6)
+        
+        # Knob
+        knob_x = self.get_knob_x()
+        knob_color = (120, 180, 255) if self.is_hovered(mouse_pos) or self.dragging else (100, 150, 220)
+        pygame.draw.circle(surface, knob_color, (knob_x, self.rect.centery), 12)
+        pygame.draw.circle(surface, (200, 200, 220), (knob_x, self.rect.centery), 12, width=2)
+
+
 def draw_center_text(surface: pygame.Surface, text: str, y: int, font=FONT, color=WHITE):
     surf = font.render(text, True, color)
     rect = surf.get_rect(center=(surface.get_width() // 2, y))
@@ -109,7 +191,7 @@ def draw_center_text(surface: pygame.Surface, text: str, y: int, font=FONT, colo
 
 
 def main():
-    # Scenes: "menu" / "loading" / "game" / "roulette"
+    # Scenes: "menu" / "loading" / "game" / "roulette" / "settings"
     scene = "menu"
     player: Player | None = None
 
@@ -119,6 +201,10 @@ def main():
     # Token currency system
     tokens = 100  # Starting tokens
     token_timer = 0.0  # Timer for passive token income (25 tokens per minute)
+    
+    # Load saved settings
+    saved_settings = _load_settings()
+    music_volume = saved_settings.get("music_volume", 100)  # 0-100
 
     window = pygame.display.set_mode((BASE_WIDTH, BASE_HEIGHT), pygame.RESIZABLE)
     pygame.display.set_caption("Merge Casino")
@@ -128,6 +214,31 @@ def main():
     menu_bg = None
     roulette_table_img = None
     base_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Music playlist system
+    music_tracks = ["bgm1.mp3", "bgm2.mp3", "bgm3.mp3", "bgm4.mp3", "bgm5.mp3", "bgm6.mp3"]
+    current_track = None
+    
+    def play_random_track():
+        nonlocal current_track
+        # Pick a random track, but not the same as the previous one
+        available_tracks = [t for t in music_tracks if t != current_track]
+        next_track = random.choice(available_tracks)
+        current_track = next_track
+        try:
+            music_path = os.path.join(base_dir, "music", next_track)
+            pygame.mixer.music.load(music_path)
+            pygame.mixer.music.set_volume(music_volume / 100.0)
+            pygame.mixer.music.play()  # Play once, then we'll pick another
+        except Exception as e:
+            print(f"Could not load music {next_track}: {e}")
+    
+    # Set up music end event
+    MUSIC_END_EVENT = pygame.USEREVENT + 1
+    pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
+    
+    # Start playing first random track
+    play_random_track()
     
     # Roulette table (top-left) - only this one opens roulette
     roulette_table = pygame.Rect(30, 80, 175, 125)
@@ -156,9 +267,15 @@ def main():
 
     btn_width, btn_height = 200, 60
     spacing = 40
-    start_btn_x = (BASE_WIDTH - (btn_width * 2 + spacing)) // 2
+    start_btn_x = (BASE_WIDTH - (btn_width * 3 + spacing * 2)) // 2
     start_btn = Button(pygame.Rect(start_btn_x, 475, btn_width, btn_height), "Start game")
-    leave_btn = Button(pygame.Rect(start_btn_x + btn_width + spacing, 475, btn_width, btn_height), "Leave")
+    settings_btn = Button(pygame.Rect(start_btn_x + btn_width + spacing, 475, btn_width, btn_height), "Settings")
+    leave_btn = Button(pygame.Rect(start_btn_x + (btn_width + spacing) * 2, 475, btn_width, btn_height), "Leave")
+    
+    # Settings UI
+    settings_panel_rect = pygame.Rect(BASE_WIDTH // 2 - 200, BASE_HEIGHT // 2 - 120, 400, 240)
+    volume_slider = Slider(pygame.Rect(settings_panel_rect.left + 50, settings_panel_rect.centery, 300, 20), 0, 100, music_volume)
+    back_btn = Button(pygame.Rect(settings_panel_rect.centerx - 75, settings_panel_rect.bottom - 70, 150, 50), "Back")
     
     def is_near_table(p: Player | None, table: pygame.Rect) -> bool:
         if p is None:
@@ -186,6 +303,10 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            
+            # Play next random track when current one ends
+            if event.type == MUSIC_END_EVENT:
+                play_random_track()
 
             if event.type == pygame.KEYDOWN and (
                 event.key == pygame.K_F11
@@ -200,7 +321,9 @@ def main():
                 pygame.display.set_caption("Merge Casino")
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                if scene == "testscene":
+                if scene == "settings":
+                    scene = "menu"
+                elif scene == "testscene":
                     # Terug naar de blauwe map (game) i.p.v. menu
                     scene = "game"
                 elif scene == "roulette":
@@ -239,14 +362,27 @@ def main():
                 elif event.key == pygame.K_s:
                     roulette_state = change_bet_type(roulette_state, "even")
 
+            # Settings slider handling
+            if scene == "settings":
+                if volume_slider.handle_event(event, mouse_pos):
+                    music_volume = volume_slider.value
+                    pygame.mixer.music.set_volume(music_volume / 100.0)
+                    _save_settings({"music_volume": music_volume})
+
             # Menu button clicks
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if scene == "menu":
                     if start_btn.handle_click(mouse_pos):
                         scene = "loading"
                         loading_elapsed = 0.0
+                    elif settings_btn.handle_click(mouse_pos):
+                        scene = "settings"
+                        volume_slider.value = music_volume  # Sync slider with current volume
                     elif leave_btn.handle_click(mouse_pos):
                         running = False
+                elif scene == "settings":
+                    if back_btn.handle_click(mouse_pos):
+                        scene = "menu"
 
         # Draw
         canvas.fill(BG)
@@ -256,8 +392,38 @@ def main():
                 canvas.blit(menu_bg, (0, 0))
             draw_center_text(canvas, "Main Menu", 180, font=FONT)
             start_btn.draw(canvas, mouse_pos)
+            settings_btn.draw(canvas, mouse_pos)
             leave_btn.draw(canvas, mouse_pos)
             draw_center_text(canvas, "Tip: ESC = afsluiten (menu) / terug (game)", 580, font=FONT_TIP, color=(200, 200, 200))
+
+        elif scene == "settings":
+            if menu_bg is not None:
+                canvas.blit(menu_bg, (0, 0))
+            
+            # Draw settings panel background
+            pygame.draw.rect(canvas, (35, 40, 50), settings_panel_rect, border_radius=16)
+            pygame.draw.rect(canvas, (60, 70, 90), settings_panel_rect, width=3, border_radius=16)
+            
+            # Title
+            title_surf = FONT.render("Settings", True, WHITE)
+            title_rect = title_surf.get_rect(centerx=settings_panel_rect.centerx, top=settings_panel_rect.top + 20)
+            canvas.blit(title_surf, title_rect)
+            
+            # Volume label
+            volume_label = FONT_SMALL.render("Music Volume", True, WHITE)
+            volume_label_rect = volume_label.get_rect(centerx=settings_panel_rect.centerx, top=settings_panel_rect.top + 70)
+            canvas.blit(volume_label, volume_label_rect)
+            
+            # Volume slider
+            volume_slider.draw(canvas, mouse_pos)
+            
+            # Volume percentage
+            volume_text = FONT_SMALL.render(f"{volume_slider.value}%", True, (180, 200, 255))
+            volume_text_rect = volume_text.get_rect(centerx=settings_panel_rect.centerx, top=volume_slider.rect.bottom + 10)
+            canvas.blit(volume_text, volume_text_rect)
+            
+            # Back button
+            back_btn.draw(canvas, mouse_pos)
 
         elif scene == "loading":
             loading_elapsed += dt
