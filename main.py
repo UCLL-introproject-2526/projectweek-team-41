@@ -6,7 +6,8 @@ import pygame
 from loading import draw_game_screen
 from move import Player
 from roulette import draw_roulette_scene, spin_roulette, reset_roulette, change_bet_amount, change_bet_type
-from slotmachine import draw_slotmachine_scene, spin_slotmachine, change_slot_bet_amount  # <-- added
+from slotmachine import draw_slotmachine_scene, spin_slotmachine, change_slot_bet_amount
+from luckywheel import LuckyWheel, draw_spin_button, draw_winner_announcement
 
 # Initialize Pygame
 pygame.init()
@@ -89,6 +90,12 @@ BTN_HOVER = (95, 110, 150)
 BTN_TEXT = (255, 255, 255)
 
 LOADING_DURATION_SECONDS = 3.0
+
+# Table colors for each game
+TABLE_COLOR_SLOTS = (139, 69, 19)      # Brown for slot machines
+TABLE_COLOR_EMPTY = (60, 60, 60)       # Gray for empty/future
+TABLE_COLOR_ROULETTE = (0, 100, 0)     # Green for roulette
+TABLE_COLOR_WHEEL = (100, 50, 150)     # Purple for lucky wheel
 
 
 def _circle_rect_distance(cx: float, cy: float, rect: pygame.Rect) -> float:
@@ -190,6 +197,111 @@ def draw_center_text(surface: pygame.Surface, text: str, y: int, font=FONT, colo
     surface.blit(surf, rect)
 
 
+def draw_luckywheel_scene(surface: pygame.Surface, game_state: dict, font: pygame.font.Font) -> dict:
+    """Draw and update lucky wheel game on the given surface."""
+    if "initialized" not in game_state:
+        tokens = game_state.get("tokens", 100)
+        surf_w, surf_h = surface.get_size()
+        wheel = LuckyWheel(surf_w // 2, surf_h // 2 - 20, 180, num_slots=10)
+        wheel.prizes = ["10", "50", "100", "25", "5", "500", "15", "75", "200", "JACKPOT"]
+        
+        game_state = {
+            "initialized": True,
+            "wheel": wheel,
+            "tokens": tokens,
+            "bet_amount": 10,
+            "last_win": 0,
+        }
+    
+    wheel: LuckyWheel = game_state["wheel"]
+    wheel.update()
+    
+    # Draw background gradient
+    for y in range(surface.get_height()):
+        color_value = int(20 + (y / surface.get_height()) * 40)
+        pygame.draw.line(surface, (0, color_value, 0), (0, y), (surface.get_width(), y))
+    
+    wheel.draw(surface)
+    
+    surf_w, surf_h = surface.get_size()
+    mouse_pos = pygame.mouse.get_pos()
+    button_rect = draw_spin_button(surface, surf_w // 2, surf_h - 60, 200, 60, mouse_pos, wheel.is_spinning)
+    game_state["button_rect"] = button_rect
+    
+    # Draw token counter
+    token_text = f"Tokens: {game_state['tokens']}"
+    token_surf = font.render(token_text, True, (255, 215, 0))
+    surface.blit(token_surf, (20, 20))
+    
+    # Draw bet amount
+    bet_text = f"Bet: {game_state['bet_amount']}"
+    bet_surf = pygame.font.Font(None, 32).render(bet_text, True, (255, 255, 255))
+    surface.blit(bet_surf, (20, 60))
+    
+    # Draw controls hint
+    hint_font = pygame.font.Font(None, 24)
+    hints = ["SPACE - Spin", "UP/DOWN - Bet", "ESC - Back"]
+    for i, hint in enumerate(hints):
+        hint_surf = hint_font.render(hint, True, (200, 200, 200))
+        surface.blit(hint_surf, (20, surf_h - 80 + i * 22))
+    
+    # Draw winner announcement if won
+    if wheel.winner and not wheel.is_spinning:
+        draw_winner_announcement(surface, wheel.winner, wheel.celebration_timer, surf_w // 2, surf_h // 2)
+        
+        if not game_state.get("win_processed", False):
+            try:
+                win_amount = int(wheel.winner.replace("$", "").replace(",", ""))
+                if wheel.winner == "JACKPOT":
+                    win_amount = 1000
+                game_state["tokens"] += win_amount
+                game_state["last_win"] = win_amount
+            except ValueError:
+                pass
+            game_state["win_processed"] = True
+    
+    return game_state
+
+
+def spin_luckywheel(game_state: dict) -> dict:
+    """Start a lucky wheel spin."""
+    if "wheel" not in game_state:
+        return game_state
+    
+    wheel: LuckyWheel = game_state["wheel"]
+    bet = game_state.get("bet_amount", 10)
+    tokens = game_state.get("tokens", 0)
+    
+    if wheel.is_spinning or tokens < bet:
+        return game_state
+    
+    game_state["tokens"] = tokens - bet
+    game_state["win_processed"] = False
+    wheel.spin()
+    
+    return game_state
+
+
+def change_wheel_bet(game_state: dict, increase: bool) -> dict:
+    """Change lucky wheel bet amount."""
+    if "wheel" not in game_state:
+        return game_state
+    
+    wheel: LuckyWheel = game_state["wheel"]
+    if wheel.is_spinning:
+        return game_state
+    
+    current = game_state.get("bet_amount", 10)
+    tokens = game_state.get("tokens", 0)
+    
+    if increase:
+        game_state["bet_amount"] = min(current + 10, tokens, 100)
+    else:
+        game_state["bet_amount"] = max(current - 10, 10)
+    
+    return game_state
+
+
 def main():
     # Scenes: "menu" / "loading" / "game" / "roulette" / "settings"
     scene = "menu"
@@ -197,7 +309,8 @@ def main():
 
     loading_elapsed = 0.0
     roulette_state = {}  # State for roulette game
-    slotmachine_state = {}  # <-- added
+    slotmachine_state = {}
+    luckywheel_state = {}  # State for lucky wheel game
 
     # Token currency system
     tokens = 100  # Starting tokens
@@ -213,7 +326,7 @@ def main():
     is_fullscreen = False
 
     menu_bg = None
-    roulette_table_img = None
+    lobby_bg = None
     base_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Music playlist system
@@ -241,14 +354,22 @@ def main():
     # Start playing first random track
     play_random_track()
     
-    # Roulette table (top-left) - only this one opens roulette
-    roulette_table = pygame.Rect(30, 80, 175, 125)
+    # Table size and positions (4 corners)
+    TABLE_WIDTH = 370
+    TABLE_HEIGHT = 250
+    TABLE_MARGIN = 0
     
-    # Other tables (bottom-right) - for future games
-    other_table = pygame.Rect(BASE_WIDTH - 130, BASE_HEIGHT - 150, 100, 100)
+    # Top-left: Slot Machines
+    table_slots = pygame.Rect(TABLE_MARGIN, TABLE_MARGIN, TABLE_WIDTH, TABLE_HEIGHT)
+    # Top-right: Empty (future game)
+    table_empty = pygame.Rect(BASE_WIDTH - TABLE_MARGIN - TABLE_WIDTH, TABLE_MARGIN, TABLE_WIDTH, TABLE_HEIGHT)
+    # Bottom-left: Roulette
+    table_roulette = pygame.Rect(TABLE_MARGIN, BASE_HEIGHT - TABLE_MARGIN - TABLE_HEIGHT, TABLE_WIDTH, TABLE_HEIGHT)
+    # Bottom-right: Lucky Wheel
+    table_wheel = pygame.Rect(BASE_WIDTH - TABLE_MARGIN - TABLE_WIDTH, BASE_HEIGHT - TABLE_MARGIN - TABLE_HEIGHT, TABLE_WIDTH, TABLE_HEIGHT)
     
     # All tables for collision/rendering
-    all_tables = [roulette_table, other_table]
+    all_tables = [table_slots, table_empty, table_roulette, table_wheel]
     interact_near_px = 22.0
     
     try:
@@ -259,12 +380,11 @@ def main():
         menu_bg = None
     
     try:
-        # Load roulette table image
-        roulette_img_path = os.path.join(base_dir, "img", "roulette top view.png")
-        roulette_table_img = pygame.image.load(roulette_img_path).convert_alpha()
-        roulette_table_img = pygame.transform.smoothscale(roulette_table_img, (roulette_table.width, roulette_table.height))
+        lobby_bg_path = os.path.join(base_dir, "img", "lobby-bg.png")
+        lobby_bg = pygame.image.load(lobby_bg_path).convert_alpha()
+        lobby_bg = pygame.transform.smoothscale(lobby_bg, (BASE_WIDTH, BASE_HEIGHT))
     except Exception:
-        roulette_table_img = None
+        lobby_bg = None
 
     btn_width, btn_height = 200, 60
     spacing = 40
@@ -298,6 +418,8 @@ def main():
                 roulette_state["tokens"] = roulette_state.get("tokens", 0) + 25
             if scene == "slotmachine" and "tokens" in slotmachine_state:
                 slotmachine_state["tokens"] = slotmachine_state.get("tokens", 0) + 25
+            if scene == "luckywheel" and "tokens" in luckywheel_state:
+                luckywheel_state["tokens"] = luckywheel_state.get("tokens", 0) + 25
 
         window_mouse_pos = pygame.mouse.get_pos()
         mouse_pos = _window_to_canvas_pos(window_mouse_pos, window.get_size())
@@ -335,7 +457,10 @@ def main():
                     roulette_state = {}  # Reset roulette when leaving
                 elif scene == "slotmachine":
                     scene = "game"
-                    slotmachine_state = {}  # Reset slotmachine when leaving
+                    slotmachine_state = {}
+                elif scene == "luckywheel":
+                    scene = "game"
+                    luckywheel_state = {}
                 elif scene in ("game", "loading"):
                     scene = "menu"
                     player = None
@@ -344,12 +469,17 @@ def main():
                     running = False
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_e:
-                if scene == "game" and is_near_table(player, roulette_table):
-                    scene = "roulette"
-                    roulette_state = {"tokens": tokens}  # Pass tokens to roulette
-                elif scene == "game" and is_near_table(player, other_table):
-                    scene = "slotmachine"
-                    slotmachine_state = {"tokens": tokens}  # Pass tokens to slotmachine
+                if scene == "game":
+                    if is_near_table(player, table_roulette):
+                        scene = "roulette"
+                        roulette_state = {"tokens": tokens}
+                    elif is_near_table(player, table_slots):
+                        scene = "slotmachine"
+                        slotmachine_state = {"tokens": tokens}
+                    elif is_near_table(player, table_wheel):
+                        scene = "luckywheel"
+                        luckywheel_state = {"tokens": tokens}
+                    # table_empty does nothing for now
 
             # Roulette controls
             if event.type == pygame.KEYDOWN and scene == "roulette":
@@ -381,6 +511,15 @@ def main():
                 elif event.key == pygame.K_DOWN:
                     slotmachine_state = change_slot_bet_amount(slotmachine_state, False)
 
+            # Lucky wheel controls
+            if event.type == pygame.KEYDOWN and scene == "luckywheel":
+                if event.key == pygame.K_SPACE:
+                    luckywheel_state = spin_luckywheel(luckywheel_state)
+                elif event.key == pygame.K_UP:
+                    luckywheel_state = change_wheel_bet(luckywheel_state, True)
+                elif event.key == pygame.K_DOWN:
+                    luckywheel_state = change_wheel_bet(luckywheel_state, False)
+
             # Menu/scene mouse clicks
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if scene == "menu":
@@ -399,6 +538,10 @@ def main():
                     btn = slotmachine_state.get("button_rect")
                     if isinstance(btn, pygame.Rect) and btn.collidepoint(mouse_pos):
                         slotmachine_state = spin_slotmachine(slotmachine_state)
+                elif scene == "luckywheel":
+                    btn = luckywheel_state.get("button_rect")
+                    if isinstance(btn, pygame.Rect) and btn.collidepoint(mouse_pos):
+                        luckywheel_state = spin_luckywheel(luckywheel_state)
 
         # Draw
         canvas.fill(BG)
@@ -454,45 +597,45 @@ def main():
 
         elif scene == "slotmachine":
             slotmachine_state = draw_slotmachine_scene(canvas, slotmachine_state, font=FONT)
-            tokens = slotmachine_state.get("tokens", tokens)  # Update tokens from slotmachine
+            tokens = slotmachine_state.get("tokens", tokens)
+
+        elif scene == "luckywheel":
+            luckywheel_state = draw_luckywheel_scene(canvas, luckywheel_state, font=FONT)
+            tokens = luckywheel_state.get("tokens", tokens)
 
         else:  # scene == "game"
-            # Map = blauwe vlakte; personage = bol.
-            canvas.fill((40, 120, 220))
+            # Draw lobby background or fallback color
+            if lobby_bg is not None:
+                canvas.blit(lobby_bg, (0, 0))
+            else:
+                canvas.fill((40, 60, 80))
 
             if player is None:
                 player = Player((BASE_WIDTH // 2, BASE_HEIGHT // 2))
 
             keys = pygame.key.get_pressed()
-            player.update(dt, keys, canvas.get_rect(), obstacles=all_tables)
+            player.update(dt, keys, canvas.get_rect(), obstacles=[])
             player.draw(canvas)
 
-            # Draw roulette table (image or fallback to green rect)
-            if roulette_table_img is not None:
-                canvas.blit(roulette_table_img, roulette_table.topleft)
-            else:
-                pygame.draw.rect(canvas, (0, 100, 0), roulette_table)
-                pygame.draw.rect(canvas, (255, 215, 0), roulette_table, width=2)
-                label = FONT_TIP.render("R", True, (255, 255, 255))
-                label_rect = label.get_rect(center=roulette_table.center)
-                canvas.blit(label, label_rect)
-            
-            # Draw other table (gray - not yet implemented)
-            pygame.draw.rect(canvas, (60, 60, 60), other_table)
-            pygame.draw.rect(canvas, (150, 150, 150), other_table, width=2)
-            label2 = FONT_TIP.render("?", True, (150, 150, 150))
-            label2_rect = label2.get_rect(center=other_table.center)
-            canvas.blit(label2, label2_rect)
+            # Tables are invisible interaction zones (no collision)
 
-            # Draw token counter at top
+            # Draw token counter at top center
             token_text = f"Tokens: {tokens}"
             token_surf = FONT_SMALL.render(token_text, True, (255, 215, 0))
-            token_rect = token_surf.get_rect(topright=(BASE_WIDTH - 20, 20))
+            token_rect = token_surf.get_rect(midtop=(BASE_WIDTH // 2, 10))
             pygame.draw.rect(canvas, (30, 30, 30), token_rect.inflate(20, 10), border_radius=8)
             canvas.blit(token_surf, token_rect)
 
-            # Popup: toon 'E' als je dichtbij roulette table OF slotmachine table staat
-            if is_near_table(player, roulette_table) or is_near_table(player, other_table):
+            # Show 'E' popup when near any interactive table (not empty one)
+            near_table = None
+            if is_near_table(player, table_roulette):
+                near_table = table_roulette
+            elif is_near_table(player, table_slots):
+                near_table = table_slots
+            elif is_near_table(player, table_wheel):
+                near_table = table_wheel
+            
+            if near_table is not None:
                 popup = pygame.Rect(0, 0, 26, 26)
                 popup.center = (int(player.x), int(player.y - (player.radius + 18)))
                 popup.clamp_ip(canvas.get_rect())

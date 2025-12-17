@@ -333,12 +333,15 @@ class SlotMachine:
 
     def load_images(self):
         """Load all symbol images"""
+        import os
+        base_dir = os.path.dirname(os.path.abspath(__file__))
         self.images = {}
         symbols = ["cherry", "lemon", "orange", "plum", "bell", "bar", "seven"]
 
         for symbol in symbols:
             try:
-                img = pygame.image.load(f"img/slotmachine/{symbol}.png")
+                img_path = os.path.join(base_dir, "img", "slotmachine", f"{symbol}.png")
+                img = pygame.image.load(img_path)
                 self.images[symbol] = pygame.transform.scale(img, (SYMBOL_SIZE, SYMBOL_SIZE))
             except Exception:
                 self.images[symbol] = self.create_placeholder(symbol)

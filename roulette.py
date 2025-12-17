@@ -47,11 +47,225 @@ COLOR_WHITE = (255, 255, 255)
 COLOR_GOLD = (218, 165, 32)
 COLOR_BALL = (255, 255, 255)
 COLOR_BACKGROUND = (20, 60, 20)
+BRIGHT_GOLD = (255, 223, 0)
+CYAN = (0, 255, 255)
+PURPLE = (147, 112, 219)
+PINK = (255, 192, 203)
+YELLOW = (255, 255, 0)
+ORANGE = (255, 165, 0)
 
 # Physics settings
 WHEEL_FRICTION = 0.995  # How fast wheel slows down (closer to 1 = slower)
 BALL_FRICTION = 0.990   # How fast ball slows down (closer to 1 = slower)
 BALL_STOP_THRESHOLD = 0.1  # Ball "lands" when speed drops below this
+
+
+# =============================================================================
+# VFX CLASSES
+# =============================================================================
+
+class CasinoFloater:
+    """Floating casino elements like chips, cards, dice"""
+
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        self.x = random.randint(0, width)
+        self.y = random.randint(0, height)
+        self.vx = random.uniform(-0.5, 0.5)
+        self.vy = random.uniform(-1, -0.3)
+        self.type = random.choice(["chip", "spade", "heart", "diamond", "club", "dollar"])
+        self.size = random.randint(15, 30)
+        self.rotation = random.uniform(0, 360)
+        self.rotation_speed = random.uniform(-2, 2)
+        self.alpha = random.randint(30, 80)
+
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+        self.rotation += self.rotation_speed
+
+        if self.y < -50:
+            self.y = self.height + 50
+            self.x = random.randint(0, self.width)
+        if self.x < -50:
+            self.x = self.width + 50
+        elif self.x > self.width + 50:
+            self.x = -50
+
+    def draw(self, screen):
+        surf = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
+
+        if self.type == "chip":
+            pygame.draw.circle(surf, (255, 0, 0, self.alpha), (self.size, self.size), self.size)
+            pygame.draw.circle(surf, (255, 255, 255, self.alpha), (self.size, self.size), self.size, 3)
+        elif self.type == "spade":
+            color = (255, 255, 255, self.alpha)
+            points = [(self.size, self.size - 10), (self.size - 8, self.size + 5), (self.size + 8, self.size + 5)]
+            pygame.draw.polygon(surf, color, points)
+            pygame.draw.circle(surf, color, (self.size - 5, self.size), 6)
+            pygame.draw.circle(surf, color, (self.size + 5, self.size), 6)
+        elif self.type == "heart":
+            color = (255, 20, 60, self.alpha)
+            pygame.draw.circle(surf, color, (self.size - 5, self.size - 3), 7)
+            pygame.draw.circle(surf, color, (self.size + 5, self.size - 3), 7)
+            points = [(self.size - 12, self.size), (self.size, self.size + 12), (self.size + 12, self.size)]
+            pygame.draw.polygon(surf, color, points)
+        elif self.type == "diamond":
+            color = (255, 20, 60, self.alpha)
+            points = [(self.size, self.size - 10), (self.size - 8, self.size), (self.size, self.size + 10), (self.size + 8, self.size)]
+            pygame.draw.polygon(surf, color, points)
+        elif self.type == "club":
+            color = (255, 255, 255, self.alpha)
+            pygame.draw.circle(surf, color, (self.size, self.size - 5), 6)
+            pygame.draw.circle(surf, color, (self.size - 6, self.size + 2), 6)
+            pygame.draw.circle(surf, color, (self.size + 6, self.size + 2), 6)
+        elif self.type == "dollar":
+            font = pygame.font.Font(None, self.size)
+            text = font.render("$", True, (0, 255, 100, self.alpha))
+            surf.blit(text, (self.size - 8, self.size - 10))
+
+        screen.blit(surf, (int(self.x - self.size), int(self.y - self.size)))
+
+
+class GoldenSparkle:
+    """Small golden sparkle particles"""
+
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        self.x = random.randint(0, width)
+        self.y = random.randint(0, height)
+        self.vx = random.uniform(-0.3, 0.3)
+        self.vy = random.uniform(-0.5, 0.5)
+        self.lifetime = random.randint(60, 180)
+        self.age = 0
+        self.max_brightness = random.randint(150, 255)
+
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+        self.age += 1
+
+        if self.x < 0: self.x = self.width
+        if self.x > self.width: self.x = 0
+        if self.y < 0: self.y = self.height
+        if self.y > self.height: self.y = 0
+
+        if self.age >= self.lifetime:
+            self.age = 0
+            self.x = random.randint(0, self.width)
+            self.y = random.randint(0, self.height)
+
+    def draw(self, screen):
+        progress = self.age / self.lifetime
+        brightness = int(self.max_brightness * (1 - progress * 0.5))
+        size = 1 if progress > 0.5 else 2
+        color = (brightness, brightness, int(brightness * 0.7))
+        pygame.draw.circle(screen, color, (int(self.x), int(self.y)), size)
+
+
+class LightRay:
+    """Rotating spotlight effect"""
+
+    def __init__(self, width, height, angle_offset):
+        self.width = width
+        self.height = height
+        self.angle = angle_offset
+        self.speed = 0.5
+        self.length = max(width, height)
+        self.ray_width = 40
+
+    def update(self):
+        self.angle += self.speed
+        if self.angle >= 360:
+            self.angle -= 360
+
+    def draw(self, screen):
+        center_x = self.width // 2
+        center_y = self.height // 2
+
+        rad = math.radians(self.angle)
+        end_x = center_x + math.cos(rad) * self.length
+        end_y = center_y + math.sin(rad) * self.length
+
+        surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+
+        perpendicular = rad + math.pi / 2
+        hw = self.ray_width / 2
+        points = [
+            (center_x + math.cos(perpendicular) * hw, center_y + math.sin(perpendicular) * hw),
+            (center_x - math.cos(perpendicular) * hw, center_y - math.sin(perpendicular) * hw),
+            (end_x - math.cos(perpendicular) * hw, end_y - math.sin(perpendicular) * hw),
+            (end_x + math.cos(perpendicular) * hw, end_y + math.sin(perpendicular) * hw),
+        ]
+
+        pygame.draw.polygon(surf, (255, 215, 0, 15), points)
+        screen.blit(surf, (0, 0))
+
+
+class Confetti:
+    """Single confetti particle for wins"""
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.vx = random.uniform(-3, 3)
+        self.vy = random.uniform(-8, -3)
+        self.gravity = 0.3
+        self.rotation = random.uniform(0, 360)
+        self.rotation_speed = random.uniform(-10, 10)
+        self.color = random.choice([COLOR_GOLD, COLOR_RED, (0, 255, 0), CYAN, PURPLE, PINK, YELLOW, ORANGE])
+        self.size = random.randint(4, 8)
+        self.lifetime = random.randint(60, 120)
+        self.age = 0
+
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+        self.vy += self.gravity
+        self.rotation += self.rotation_speed
+        self.age += 1
+        return self.age < self.lifetime
+
+    def draw(self, screen):
+        if self.age < self.lifetime:
+            points = []
+            for i in range(4):
+                angle = math.radians(self.rotation + i * 90)
+                px = self.x + math.cos(angle) * self.size
+                py = self.y + math.sin(angle) * self.size
+                points.append((px, py))
+            pygame.draw.polygon(screen, self.color, points)
+
+
+class StarBurst:
+    """Star burst effect for wins"""
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.radius = 0
+        self.max_radius = 100
+        self.growing = True
+        self.lifetime = 30
+        self.age = 0
+
+    def update(self):
+        if self.growing:
+            self.radius += 5
+            if self.radius >= self.max_radius:
+                self.growing = False
+        self.age += 1
+        return self.age < self.lifetime
+
+    def draw(self, screen):
+        if self.age < self.lifetime:
+            for i in range(8):
+                angle = math.radians(i * 45 + self.age * 5)
+                end_x = self.x + math.cos(angle) * self.radius
+                end_y = self.y + math.sin(angle) * self.radius
+                pygame.draw.line(screen, BRIGHT_GOLD, (self.x, self.y), (end_x, end_y), 3)
 
 
 # =============================================================================
@@ -424,6 +638,7 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
     # Initialize state if needed
     if "initialized" not in game_state:
         tokens = game_state.get("tokens", 100)  # Get tokens passed from app
+        surf_w, surf_h = surface.get_size()
         game_state = {
             "initialized": True,
             "wheel_angle": 0.0,
@@ -440,6 +655,12 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
             "bet_type": "red",  # "red", "black", "green", "odd", "even"
             "bet_placed": False,  # Whether a bet is active
             "winnings": 0,  # Last win amount
+            # VFX
+            "floaters": [CasinoFloater(surf_w, surf_h) for _ in range(20)],
+            "sparkles": [GoldenSparkle(surf_w, surf_h) for _ in range(50)],
+            "light_rays": [LightRay(surf_w, surf_h, i * 90) for i in range(4)],
+            "confetti": [],
+            "starbursts": [],
         }
     
     # Get surface dimensions and calculate scale
@@ -497,6 +718,10 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
                         winnings = bet_amount * multiplier
                         game_state["tokens"] += winnings
                         game_state["winnings"] = winnings
+                        # Spawn win VFX
+                        for _ in range(30):
+                            game_state["confetti"].append(Confetti(center_x, center_y))
+                        game_state["starbursts"].append(StarBurst(center_x, center_y))
                     else:
                         game_state["winnings"] = -bet_amount
                     
@@ -504,8 +729,25 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
         else:
             game_state["ball_angle"] = (game_state["ball_relative_angle"] + game_state["wheel_angle"]) % 360
     
+    # Update win VFX
+    game_state["confetti"] = [c for c in game_state.get("confetti", []) if c.update()]
+    game_state["starbursts"] = [s for s in game_state.get("starbursts", []) if s.update()]
+    
     # Draw background
     surface.fill(COLOR_BACKGROUND)
+    
+    # Update and draw VFX (background layer)
+    for floater in game_state.get("floaters", []):
+        floater.update()
+        floater.draw(surface)
+    
+    for sparkle in game_state.get("sparkles", []):
+        sparkle.update()
+        sparkle.draw(surface)
+    
+    for ray in game_state.get("light_rays", []):
+        ray.update()
+        ray.draw(surface)
     
     # Draw outer rim
     pygame.draw.circle(surface, COLOR_GOLD, (center_x, center_y), wheel_radius + int(10 * scale))
@@ -607,6 +849,12 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
             win_surf = font.render(win_text, True, win_color)
             win_rect = win_surf.get_rect(center=(center_x, surf_h - 50))
             surface.blit(win_surf, win_rect)
+    
+    # Draw win VFX on top
+    for starburst in game_state.get("starbursts", []):
+        starburst.draw(surface)
+    for confetti in game_state.get("confetti", []):
+        confetti.draw(surface)
     
     return game_state
 
