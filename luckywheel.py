@@ -658,14 +658,6 @@ def draw_winner_announcement(surface, winner_text, celebration_timer, center_x=5
     banner_x = center_x - banner_width // 2
     banner_y = center_y - banner_height // 2
     
-    # Subtle pulsing glow
-    glow_pulse = int(15 * abs(math.sin(celebration_timer * 0.1)))
-    for i in range(5, 0, -1):
-        glow_surface = pygame.Surface((banner_width + i * 8, banner_height + i * 8), pygame.SRCALPHA)
-        pygame.draw.rect(glow_surface, (255, 215, 0, glow_pulse * (i / 5)), 
-                        (0, 0, banner_width + i * 8, banner_height + i * 8), border_radius=20)
-        surface.blit(glow_surface, (banner_x - i * 4, banner_y - i * 4))
-    
     # Banner background
     pygame.draw.rect(surface, (50, 30, 20), (banner_x, banner_y, banner_width, banner_height), border_radius=20)
     pygame.draw.rect(surface, (255, 215, 0), (banner_x, banner_y, banner_width, banner_height), 5, border_radius=20)
@@ -675,64 +667,21 @@ def draw_winner_announcement(surface, winner_text, celebration_timer, center_x=5
     top_font = pygame.font.Font(None, 56)
     top_text = "YOU WON!"
     
-    # Shadow
-    shadow = top_font.render(top_text, True, (0, 0, 0))
-    shadow_rect = shadow.get_rect(center=(center_x + 3, center_y - 50 + 3))
-    surface.blit(shadow, shadow_rect)
-    
-    # Main text
     top_surface = top_font.render(top_text, True, (255, 255, 255))
-    top_rect = top_surface. get_rect(center=(center_x, center_y - 50))
+    top_rect = top_surface.get_rect(center=(center_x, center_y - 50))
     surface.blit(top_surface, top_rect)
     
-    # Prize text - BIG and clear with subtle pulse
-    pulse = 1.0 + 0.05 * math.sin(celebration_timer * 0.2)
-    prize_size = int(100 * pulse)
-    prize_font = pygame.font.Font(None, prize_size)
-    
-    # Multiple shadows for depth
-    for offset in [6, 4, 2]: 
-        shadow = prize_font.render(winner_text, True, (0, 0, 0))
-        shadow_rect = shadow.get_rect(center=(center_x + offset, center_y + 20 + offset))
-        surface.blit(shadow, shadow_rect)
-    
-    # Main prize text in gold
+    # Prize text - static
+    prize_font = pygame.font.Font(None, 100)
     prize_surface = prize_font.render(winner_text, True, (255, 215, 0))
     prize_rect = prize_surface.get_rect(center=(center_x, center_y + 20))
     surface.blit(prize_surface, prize_rect)
     
-    # Bright highlight
-    highlight = prize_font.render(winner_text, True, (255, 255, 200))
-    highlight.set_alpha(100)
-    surface.blit(highlight, prize_rect.move(-1, -1))
-    
-    # Simple rotating stars around the prize (just 6 stars)
-    num_stars = 6
-    orbit_radius = 200
-    for i in range(num_stars):
-        angle = math.radians((i * (360 / num_stars)) + celebration_timer * 3)
-        star_x = center_x + orbit_radius * math.cos(angle)
-        star_y = center_y + 20 + orbit_radius * 0.4 * math.sin(angle)
-        
-        size = 15
-        points = []
-        for j in range(10):
-            star_angle = math.radians(j * 36 - 90)
-            radius = size if j % 2 == 0 else size // 2.5
-            px = star_x + radius * math.cos(star_angle)
-            py = star_y + radius * math.sin(star_angle)
-            points.append((px, py))
-        
-        pygame.draw.polygon(surface, (255, 215, 0), points)
-        pygame.draw. polygon(surface, (255, 255, 255), points, 2)
-    
     # "Click to spin again" at bottom
     bottom_font = pygame.font.Font(None, 36)
-    bottom_alpha = int(150 + 105 * abs(math.sin(celebration_timer * 0.25)))
     bottom_text = "Click to spin again!"
     
     bottom_surface = bottom_font.render(bottom_text, True, (255, 255, 255))
-    bottom_surface.set_alpha(bottom_alpha)
     bottom_rect = bottom_surface.get_rect(center=(center_x, banner_y + banner_height - 30))
     surface.blit(bottom_surface, bottom_rect)
 
