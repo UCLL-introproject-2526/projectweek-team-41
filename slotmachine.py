@@ -656,7 +656,7 @@ class SlotMachine:
         pygame.draw.rect(self.screen, (40, 40, 40), bet_box, border_radius=8)
         pygame.draw.rect(self.screen, CASINO_RED, bet_box, 2, border_radius=8)
 
-        bet_label = self.font_tiny.render("BET", True, CYAN)
+        bet_label = self.font_tiny.render("PRICE", True, CYAN)
         self.screen.blit(bet_label, (20, 73))
 
         bet_text = self.font_small.render(f"{self.bet_amount}", True, CASINO_RED)
