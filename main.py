@@ -520,6 +520,13 @@ def main():
                 elif event.key == pygame.K_DOWN:
                     luckywheel_state = change_wheel_bet(luckywheel_state, False)
 
+            # Settings slider event handling
+            if scene == "settings":
+                if volume_slider.handle_event(event, mouse_pos):
+                    music_volume = volume_slider.value
+                    pygame.mixer.music.set_volume(music_volume / 100.0)
+                    _save_settings({"music_volume": music_volume})
+
             # Menu/scene mouse clicks
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if scene == "menu":
