@@ -5,7 +5,7 @@ import random
 import pygame
 from loading import draw_game_screen
 from move import Player
-from roulette import draw_roulette_scene, spin_roulette, reset_roulette, change_bet_amount, change_bet_type
+from roulette import draw_roulette_scene, spin_roulette, reset_roulette, change_bet_amount, change_bet_type, handle_roulette_click, handle_roulette_keypress
 from slotmachine import draw_slotmachine_scene, spin_slotmachine, change_slot_bet_amount
 from luckywheel import LuckyWheel, draw_spin_button, draw_winner_announcement
 
@@ -483,24 +483,28 @@ def main():
 
             # Roulette controls
             if event.type == pygame.KEYDOWN and scene == "roulette":
-                if event.key == pygame.K_SPACE:
-                    roulette_state = spin_roulette(roulette_state)
-                elif event.key == pygame.K_r:
-                    roulette_state = reset_roulette(roulette_state)
-                elif event.key == pygame.K_1:
-                    roulette_state = change_bet_amount(roulette_state, False)  # Decrease
-                elif event.key == pygame.K_2:
-                    roulette_state = change_bet_amount(roulette_state, True)   # Increase
-                elif event.key == pygame.K_q:
-                    roulette_state = change_bet_type(roulette_state, "red")
-                elif event.key == pygame.K_w:
-                    roulette_state = change_bet_type(roulette_state, "black")
-                elif event.key == pygame.K_e:
-                    roulette_state = change_bet_type(roulette_state, "green")
-                elif event.key == pygame.K_a:
-                    roulette_state = change_bet_type(roulette_state, "odd")
-                elif event.key == pygame.K_s:
-                    roulette_state = change_bet_type(roulette_state, "even")
+                # First check if number input is handling the key
+                roulette_state = handle_roulette_keypress(roulette_state, event)
+                # Only process other keys if number input is not active
+                if not roulette_state.get("number_input_active", False):
+                    if event.key == pygame.K_SPACE:
+                        roulette_state = spin_roulette(roulette_state)
+                    elif event.key == pygame.K_r:
+                        roulette_state = reset_roulette(roulette_state)
+                    elif event.key == pygame.K_1:
+                        roulette_state = change_bet_amount(roulette_state, False)  # Decrease
+                    elif event.key == pygame.K_2:
+                        roulette_state = change_bet_amount(roulette_state, True)   # Increase
+                    elif event.key == pygame.K_q:
+                        roulette_state = change_bet_type(roulette_state, "red")
+                    elif event.key == pygame.K_w:
+                        roulette_state = change_bet_type(roulette_state, "black")
+                    elif event.key == pygame.K_e:
+                        roulette_state = change_bet_type(roulette_state, "green")
+                    elif event.key == pygame.K_a:
+                        roulette_state = change_bet_type(roulette_state, "odd")
+                    elif event.key == pygame.K_s:
+                        roulette_state = change_bet_type(roulette_state, "even")
 
             # Slotmachine controls
             if event.type == pygame.KEYDOWN and scene == "slotmachine":
@@ -541,6 +545,8 @@ def main():
                 elif scene == "settings":
                     if back_btn.handle_click(mouse_pos):
                         scene = "menu"
+                elif scene == "roulette":
+                    roulette_state = handle_roulette_click(roulette_state, mouse_pos)
                 elif scene == "slotmachine":
                     btn = slotmachine_state.get("button_rect")
                     if isinstance(btn, pygame.Rect) and btn.collidepoint(mouse_pos):

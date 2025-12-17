@@ -652,7 +652,10 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
             "result_pocket_index": None,
             "tokens": tokens,
             "current_bet": 10,  # Current bet amount
-            "bet_type": "red",  # "red", "black", "green", "odd", "even"
+            "bet_type": "red",  # "red", "black", "green", "odd", "even", or "number"
+            "bet_number": None,  # Specific number to bet on (0-36)
+            "number_input": "",  # Text input for number betting
+            "number_input_active": False,  # Whether number input is focused
             "bet_placed": False,  # Whether a bet is active
             "winnings": 0,  # Last win amount
             # VFX
@@ -661,6 +664,8 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
             "light_rays": [LightRay(surf_w, surf_h, i * 90) for i in range(4)],
             "confetti": [],
             "starbursts": [],
+            # Button rects (will be set during drawing)
+            "buttons": {},
         }
     
     # Get surface dimensions and calculate scale
@@ -695,10 +700,15 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
                     result = game_state["result_number"]
                     bet_type = game_state["bet_type"]
                     bet_amount = game_state["current_bet"]
+                    bet_number = game_state.get("bet_number")
                     won = False
                     multiplier = 0
                     
-                    if bet_type == "red" and result in RED_NUMBERS:
+                    # Check for number bet first (highest payout)
+                    if bet_type == "number" and bet_number is not None and result == bet_number:
+                        won = True
+                        multiplier = 36  # 35:1 payout + original bet
+                    elif bet_type == "red" and result in RED_NUMBERS:
                         won = True
                         multiplier = 2
                     elif bet_type == "black" and result not in RED_NUMBERS and result != 0:
@@ -792,19 +802,158 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
     # Draw UI
     hint_font = pygame.font.Font(None, max(16, int(24 * scale)))
     bet_font = pygame.font.Font(None, max(20, int(28 * scale)))
+    btn_font = pygame.font.Font(None, max(18, int(22 * scale)))
     
-    # Instructions on left
-    instructions = ["SPACE - Spin (place bet)", "R - Reset", "ESC - Back", "", "1/2 - Bet amount", "Q/W/E/A/S - Bet type"]
-    y = 20
-    for text in instructions:
-        surf = hint_font.render(text, True, COLOR_WHITE)
-        surface.blit(surf, (20, y))
-        y += int(22 * scale)
+    # Store button rects for click detection
+    buttons = {}
+    
+    # Button dimensions
+    btn_w, btn_h = 70, 30
+    btn_spacing = 5
+    
+    # Left side - Bet type buttons
+    btn_x = 15
+    btn_y = 20
+    
+    # Spin button (larger)
+    spin_rect = pygame.Rect(btn_x, btn_y, btn_w + 30, btn_h + 5)
+    spin_color = (50, 150, 50) if not game_state.get("ball_active", False) else (80, 80, 80)
+    pygame.draw.rect(surface, spin_color, spin_rect, border_radius=8)
+    pygame.draw.rect(surface, COLOR_GOLD, spin_rect, 2, border_radius=8)
+    spin_text = btn_font.render("SPIN", True, COLOR_WHITE)
+    surface.blit(spin_text, spin_text.get_rect(center=spin_rect.center))
+    buttons["spin"] = spin_rect
+    btn_y += btn_h + 15
+    
+    # Reset button
+    reset_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+    pygame.draw.rect(surface, (100, 50, 50), reset_rect, border_radius=6)
+    pygame.draw.rect(surface, COLOR_WHITE, reset_rect, 1, border_radius=6)
+    reset_text = btn_font.render("Reset", True, COLOR_WHITE)
+    surface.blit(reset_text, reset_text.get_rect(center=reset_rect.center))
+    buttons["reset"] = reset_rect
+    btn_y += btn_h + 15
+    
+    # Bet amount controls
+    amount_label = hint_font.render("Bet Amount:", True, COLOR_WHITE)
+    surface.blit(amount_label, (btn_x, btn_y))
+    btn_y += 20
+    
+    # Minus button
+    minus_rect = pygame.Rect(btn_x, btn_y, 35, btn_h)
+    pygame.draw.rect(surface, (80, 80, 120), minus_rect, border_radius=6)
+    pygame.draw.rect(surface, COLOR_WHITE, minus_rect, 1, border_radius=6)
+    minus_text = btn_font.render("-", True, COLOR_WHITE)
+    surface.blit(minus_text, minus_text.get_rect(center=minus_rect.center))
+    buttons["bet_minus"] = minus_rect
+    
+    # Plus button
+    plus_rect = pygame.Rect(btn_x + 45, btn_y, 35, btn_h)
+    pygame.draw.rect(surface, (80, 80, 120), plus_rect, border_radius=6)
+    pygame.draw.rect(surface, COLOR_WHITE, plus_rect, 1, border_radius=6)
+    plus_text = btn_font.render("+", True, COLOR_WHITE)
+    surface.blit(plus_text, plus_text.get_rect(center=plus_rect.center))
+    buttons["bet_plus"] = plus_rect
+    btn_y += btn_h + 15
+    
+    # Bet type label
+    type_label = hint_font.render("Bet Type:", True, COLOR_WHITE)
+    surface.blit(type_label, (btn_x, btn_y))
+    btn_y += 20
+    
+    # Color bet buttons (row 1)
+    bet_type = game_state.get("bet_type", "red")
+    
+    # Red button
+    red_rect = pygame.Rect(btn_x, btn_y, 50, btn_h)
+    red_color = (200, 50, 50) if bet_type == "red" else (120, 30, 30)
+    pygame.draw.rect(surface, red_color, red_rect, border_radius=6)
+    pygame.draw.rect(surface, COLOR_WHITE if bet_type == "red" else (80, 80, 80), red_rect, 2, border_radius=6)
+    red_text = btn_font.render("RED", True, COLOR_WHITE)
+    surface.blit(red_text, red_text.get_rect(center=red_rect.center))
+    buttons["red"] = red_rect
+    
+    # Black button
+    black_rect = pygame.Rect(btn_x + 55, btn_y, 50, btn_h)
+    black_color = (60, 60, 60) if bet_type == "black" else (30, 30, 30)
+    pygame.draw.rect(surface, black_color, black_rect, border_radius=6)
+    pygame.draw.rect(surface, COLOR_WHITE if bet_type == "black" else (80, 80, 80), black_rect, 2, border_radius=6)
+    black_text = btn_font.render("BLK", True, COLOR_WHITE)
+    surface.blit(black_text, black_text.get_rect(center=black_rect.center))
+    buttons["black"] = black_rect
+    btn_y += btn_h + btn_spacing
+    
+    # Green button
+    green_rect = pygame.Rect(btn_x, btn_y, 50, btn_h)
+    green_color = (30, 150, 30) if bet_type == "green" else (20, 80, 20)
+    pygame.draw.rect(surface, green_color, green_rect, border_radius=6)
+    pygame.draw.rect(surface, COLOR_WHITE if bet_type == "green" else (80, 80, 80), green_rect, 2, border_radius=6)
+    green_text = btn_font.render("GRN", True, COLOR_WHITE)
+    surface.blit(green_text, green_text.get_rect(center=green_rect.center))
+    buttons["green"] = green_rect
+    btn_y += btn_h + btn_spacing
+    
+    # Odd/Even buttons
+    odd_rect = pygame.Rect(btn_x, btn_y, 50, btn_h)
+    odd_color = (80, 80, 160) if bet_type == "odd" else (50, 50, 100)
+    pygame.draw.rect(surface, odd_color, odd_rect, border_radius=6)
+    pygame.draw.rect(surface, COLOR_WHITE if bet_type == "odd" else (80, 80, 80), odd_rect, 2, border_radius=6)
+    odd_text = btn_font.render("ODD", True, COLOR_WHITE)
+    surface.blit(odd_text, odd_text.get_rect(center=odd_rect.center))
+    buttons["odd"] = odd_rect
+    
+    even_rect = pygame.Rect(btn_x + 55, btn_y, 50, btn_h)
+    even_color = (160, 80, 80) if bet_type == "even" else (100, 50, 50)
+    pygame.draw.rect(surface, even_color, even_rect, border_radius=6)
+    pygame.draw.rect(surface, COLOR_WHITE if bet_type == "even" else (80, 80, 80), even_rect, 2, border_radius=6)
+    even_text = btn_font.render("EVN", True, COLOR_WHITE)
+    surface.blit(even_text, even_text.get_rect(center=even_rect.center))
+    buttons["even"] = even_rect
+    btn_y += btn_h + 15
+    
+    # Number bet section
+    num_label = hint_font.render("Bet on #:", True, COLOR_WHITE)
+    surface.blit(num_label, (btn_x, btn_y))
+    btn_y += 20
+    
+    # Number input field
+    input_active = game_state.get("number_input_active", False)
+    number_input = game_state.get("number_input", "")
+    input_rect = pygame.Rect(btn_x, btn_y, 60, btn_h)
+    input_bg = (60, 60, 80) if input_active else (40, 40, 50)
+    pygame.draw.rect(surface, input_bg, input_rect, border_radius=6)
+    pygame.draw.rect(surface, COLOR_GOLD if input_active else (80, 80, 100), input_rect, 2, border_radius=6)
+    
+    # Display input text or placeholder
+    if number_input:
+        input_text = btn_font.render(number_input, True, COLOR_WHITE)
+    else:
+        input_text = btn_font.render("0-36", True, (100, 100, 120))
+    surface.blit(input_text, input_text.get_rect(center=input_rect.center))
+    buttons["number_input"] = input_rect
+    
+    # Confirm number button
+    confirm_rect = pygame.Rect(btn_x + 65, btn_y, 40, btn_h)
+    confirm_color = (50, 120, 50) if bet_type == "number" else (40, 80, 40)
+    pygame.draw.rect(surface, confirm_color, confirm_rect, border_radius=6)
+    pygame.draw.rect(surface, COLOR_WHITE if bet_type == "number" else (80, 80, 80), confirm_rect, 2, border_radius=6)
+    confirm_text = btn_font.render("OK", True, COLOR_WHITE)
+    surface.blit(confirm_text, confirm_text.get_rect(center=confirm_rect.center))
+    buttons["confirm_number"] = confirm_rect
+    btn_y += btn_h + 10
+    
+    # Show current number bet if active
+    bet_number = game_state.get("bet_number")
+    if bet_type == "number" and bet_number is not None:
+        num_bet_text = hint_font.render(f"Betting on: {bet_number}", True, COLOR_GOLD)
+        surface.blit(num_bet_text, (btn_x, btn_y))
+    
+    # Store buttons in game state for click handling
+    game_state["buttons"] = buttons
     
     # Token and bet info on right
     tokens = game_state.get("tokens", 0)
     current_bet = game_state.get("current_bet", 10)
-    bet_type = game_state.get("bet_type", "red")
     
     # Token display
     token_text = f"Tokens: {tokens}"
@@ -817,8 +966,11 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
     surface.blit(bet_surf, (surf_w - 150, 50))
     
     # Bet type display with color
-    bet_colors = {"red": COLOR_RED, "black": COLOR_BLACK, "green": COLOR_GREEN, "odd": (100, 100, 200), "even": (200, 100, 100)}
-    type_text = f"Type: {bet_type.upper()}"
+    bet_colors = {"red": COLOR_RED, "black": COLOR_BLACK, "green": COLOR_GREEN, "odd": (100, 100, 200), "even": (200, 100, 100), "number": COLOR_GOLD}
+    if bet_type == "number" and bet_number is not None:
+        type_text = f"Type: #{bet_number}"
+    else:
+        type_text = f"Type: {bet_type.upper()}"
     type_surf = bet_font.render(type_text, True, bet_colors.get(bet_type, COLOR_WHITE))
     surface.blit(type_surf, (surf_w - 150, 80))
     
@@ -932,9 +1084,82 @@ def change_bet_type(game_state: dict, bet_type: str) -> dict:
     if game_state.get("ball_active", False):
         return game_state  # Can't change while spinning
     
-    valid_types = ["red", "black", "green", "odd", "even"]
+    valid_types = ["red", "black", "green", "odd", "even", "number"]
     if bet_type in valid_types:
         game_state["bet_type"] = bet_type
+    return game_state
+
+
+def handle_roulette_click(game_state: dict, mouse_pos: tuple) -> dict:
+    """Handle mouse clicks on roulette buttons."""
+    if not game_state.get("initialized", False):
+        return game_state
+    
+    buttons = game_state.get("buttons", {})
+    
+    # Check each button
+    for btn_name, btn_rect in buttons.items():
+        if btn_rect.collidepoint(mouse_pos):
+            if btn_name == "spin":
+                return spin_roulette(game_state)
+            elif btn_name == "reset":
+                return reset_roulette(game_state)
+            elif btn_name == "bet_minus":
+                return change_bet_amount(game_state, False)
+            elif btn_name == "bet_plus":
+                return change_bet_amount(game_state, True)
+            elif btn_name in ["red", "black", "green", "odd", "even"]:
+                return change_bet_type(game_state, btn_name)
+            elif btn_name == "number_input":
+                game_state["number_input_active"] = True
+                return game_state
+            elif btn_name == "confirm_number":
+                # Confirm number bet
+                number_input = game_state.get("number_input", "")
+                try:
+                    num = int(number_input)
+                    if 0 <= num <= 36:
+                        game_state["bet_number"] = num
+                        game_state["bet_type"] = "number"
+                        game_state["number_input_active"] = False
+                except ValueError:
+                    pass
+                return game_state
+    
+    # Click outside number input deactivates it
+    if "number_input" in buttons and not buttons["number_input"].collidepoint(mouse_pos):
+        game_state["number_input_active"] = False
+    
+    return game_state
+
+
+def handle_roulette_keypress(game_state: dict, event) -> dict:
+    """Handle keyboard input for roulette, including number input field."""
+    if not game_state.get("initialized", False):
+        return game_state
+    
+    # If number input is active, handle text input
+    if game_state.get("number_input_active", False):
+        if event.key == pygame.K_RETURN:
+            # Confirm number
+            number_input = game_state.get("number_input", "")
+            try:
+                num = int(number_input)
+                if 0 <= num <= 36:
+                    game_state["bet_number"] = num
+                    game_state["bet_type"] = "number"
+            except ValueError:
+                pass
+            game_state["number_input_active"] = False
+        elif event.key == pygame.K_ESCAPE:
+            game_state["number_input_active"] = False
+            game_state["number_input"] = ""
+        elif event.key == pygame.K_BACKSPACE:
+            game_state["number_input"] = game_state.get("number_input", "")[:-1]
+        elif event.unicode.isdigit() and len(game_state.get("number_input", "")) < 2:
+            game_state["number_input"] = game_state.get("number_input", "") + event.unicode
+        return game_state
+    
     return game_state
 
 
