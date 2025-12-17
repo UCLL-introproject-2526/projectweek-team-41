@@ -23,6 +23,15 @@ class Player:
 
 		self._is_moving = False
 		
+		# Emote state
+		self._emote_active = False
+		self._emote_timer = 0.0
+		self._emote_duration = 3.0  # seconds
+		self._smoke_frames = []
+		self._smoke_frame_index = 0
+		self._smoke_frame_timer = 0.0
+		self._smoke_frame_delay = 0.1  # seconds per frame
+		
 		# Load character images
 		self._load_images()
 
@@ -61,6 +70,41 @@ class Player:
 		self._color_idle = (255, 255, 255)
 		self._color_walk_0 = (230, 60, 60)   # rood
 		self._color_walk_1 = (70, 210, 90)   # groen
+		
+		# Load smoke gif frames for emote
+		try:
+			smoke_path = os.path.join(base_dir, "img", "smoke.gif")
+			smoke_img = pygame.image.load(smoke_path)
+			# For GIF, we try to load multiple frames if PIL is available
+			try:
+				from PIL import Image 
+				pil_img = Image.open(smoke_path)
+				self._smoke_frames = []
+				try:
+					while True:
+						frame = pil_img.copy().convert('RGBA')
+						frame_data = frame.tobytes()
+						pygame_frame = pygame.image.fromstring(frame_data, frame.size, 'RGBA')
+						# Scale smoke to appropriate size (about 30x30)
+						pygame_frame = pygame.transform.smoothscale(pygame_frame, (30, 30))
+						self._smoke_frames.append(pygame_frame)
+						pil_img.seek(pil_img.tell() + 1)
+				except EOFError:
+					pass
+			except ImportError:
+				# PIL not available, use single frame
+				smoke_img = pygame.transform.smoothscale(smoke_img.convert_alpha(), (30, 30))
+				self._smoke_frames = [smoke_img]
+		except Exception:
+			self._smoke_frames = []
+
+	def trigger_emote(self) -> None:
+		"""Trigger the smoke emote for 3 seconds."""
+		if not self._emote_active and self._smoke_frames:
+			self._emote_active = True
+			self._emote_timer = 0.0
+			self._smoke_frame_index = 0
+			self._smoke_frame_timer = 0.0
 
 	def _get_move_vector_from_keys(self, keys: pygame.key.ScancodeWrapper) -> tuple[float, float]:
 		# WASD (QWERTY) + ZQSD (AZERTY) + pijltjestoetsen
@@ -123,6 +167,18 @@ class Player:
 		bounds: pygame.Rect,
 		obstacles: list[pygame.Rect] | None = None,
 	) -> None:
+		# Update emote timer
+		if self._emote_active:
+			self._emote_timer += dt
+			self._smoke_frame_timer += dt
+			# Animate smoke frames
+			if self._smoke_frame_timer >= self._smoke_frame_delay and self._smoke_frames:
+				self._smoke_frame_timer -= self._smoke_frame_delay
+				self._smoke_frame_index = (self._smoke_frame_index + 1) % len(self._smoke_frames)
+			# Check if emote duration has passed
+			if self._emote_timer >= self._emote_duration:
+				self._emote_active = False
+		
 		dx, dy = self._get_move_vector_from_keys(keys)
 		self._is_moving = (dx != 0 or dy != 0)
 
@@ -170,4 +226,13 @@ class Player:
 			else:
 				color = self._color_walk_0 if self._walk_frame == 0 else self._color_walk_1
 			pygame.draw.circle(surface, color, (int(self.x), int(self.y)), self.radius)
+		
+		# Draw smoke emote if active
+		if self._emote_active and self._smoke_frames:
+			smoke_frame = self._smoke_frames[self._smoke_frame_index]
+			# Position smoke near the character's mouth (offset to the right and slightly up)
+			smoke_x = int(self.x) + 30
+			smoke_y = int(self.y) - 5
+			smoke_rect = smoke_frame.get_rect(center=(smoke_x, smoke_y))
+			surface.blit(smoke_frame, smoke_rect)
 

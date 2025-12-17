@@ -481,6 +481,11 @@ def main():
                         luckywheel_state = {"tokens": tokens}
                     # table_empty does nothing for now
 
+            # Smoke emote in lobby (B key)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_b:
+                if scene == "game" and player is not None:
+                    player.trigger_emote()
+
             # Roulette controls
             if event.type == pygame.KEYDOWN and scene == "roulette":
                 # First check if number input is handling the key
