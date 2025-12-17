@@ -169,11 +169,14 @@ def main():
     while running:
         dt = CLOCK.tick(60) / 1000.0
         
-        # Passive token income: 25 tokens every 60 seconds
+        # Passive token income: 25 tokens every 60 seconds (works in ALL scenes)
         token_timer += dt
         if token_timer >= 60.0:
             tokens += 25
             token_timer -= 60.0
+            # Also update roulette state if active, so income isn't lost
+            if scene == "roulette" and "tokens" in roulette_state:
+                roulette_state["tokens"] = roulette_state.get("tokens", 0) + 25
         
         window_mouse_pos = pygame.mouse.get_pos()
         mouse_pos = _window_to_canvas_pos(window_mouse_pos, window.get_size())
