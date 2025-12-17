@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pygame
+import os
 
 
 class Player:
@@ -20,11 +21,46 @@ class Player:
 		self._walk_timer = 0.0
 		self._walk_frame = 0
 
+		self._is_moving = False
+		
+		# Load character images
+		self._load_images()
+
+	def _load_images(self):
+		"""Load character sprite images."""
+		base_dir = os.path.dirname(os.path.abspath(__file__))
+		
+		# Target size for the character (based on radius * 2 for width/height)
+		target_size = (self.radius * 3, self.radius * 3)
+		
+		try:
+			# Load idle/base character image
+			idle_path = os.path.join(base_dir, "img", "standing.png")
+			self._img_idle = pygame.image.load(idle_path).convert_alpha()
+			self._img_idle = pygame.transform.smoothscale(self._img_idle, target_size)
+		except Exception:
+			self._img_idle = None
+		
+		try:
+			# Load left foot walking frame
+			left_path = os.path.join(base_dir, "img", "leftfoot.png")
+			self._img_left = pygame.image.load(left_path).convert_alpha()
+			self._img_left = pygame.transform.smoothscale(self._img_left, target_size)
+		except Exception:
+			self._img_left = None
+		
+		try:
+			# Load right foot walking frame
+			right_path = os.path.join(base_dir, "img", "rightfoot.png")
+			self._img_right = pygame.image.load(right_path).convert_alpha()
+			self._img_right = pygame.transform.smoothscale(self._img_right, target_size)
+		except Exception:
+			self._img_right = None
+		
+		# Fallback colors if images don't load
 		self._color_idle = (255, 255, 255)
 		self._color_walk_0 = (230, 60, 60)   # rood
 		self._color_walk_1 = (70, 210, 90)   # groen
-
-		self._is_moving = False
 
 	def _get_move_vector_from_keys(self, keys: pygame.key.ScancodeWrapper) -> tuple[float, float]:
 		# WASD (QWERTY) + ZQSD (AZERTY) + pijltjestoetsen
@@ -116,9 +152,22 @@ class Player:
 		self.y = max(min_y, min(max_y, self.y))
 
 	def draw(self, surface: pygame.Surface) -> None:
+		# Select the appropriate image based on movement state
 		if not self._is_moving:
-			color = self._color_idle
+			img = self._img_idle
 		else:
-			color = self._color_walk_0 if self._walk_frame == 0 else self._color_walk_1
-		pygame.draw.circle(surface, color, (int(self.x), int(self.y)), self.radius)
+			img = self._img_left if self._walk_frame == 0 else self._img_right
+		
+		# Draw image if available, otherwise fall back to colored circle
+		if img is not None:
+			# Center the image on the player position
+			img_rect = img.get_rect(center=(int(self.x), int(self.y)))
+			surface.blit(img, img_rect)
+		else:
+			# Fallback to circle drawing
+			if not self._is_moving:
+				color = self._color_idle
+			else:
+				color = self._color_walk_0 if self._walk_frame == 0 else self._color_walk_1
+			pygame.draw.circle(surface, color, (int(self.x), int(self.y)), self.radius)
 
