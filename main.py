@@ -330,7 +330,7 @@ def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Music playlist system
-    music_tracks = ["bgm1.mp3", "bgm2.mp3", "bgm3.mp3", "bgm4.mp3", "bgm5.mp3", "bgm6.mp3"]
+    music_tracks = ["bgm1.mp3", "bgm2.mp3", "bgm3.mp3", "bgm4.mp3", "bgm5.mp3", "bgm6.mp3", "bgm7.mp3"]
     current_track = None
     
     def play_random_track():
