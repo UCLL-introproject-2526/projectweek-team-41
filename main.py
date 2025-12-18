@@ -62,13 +62,16 @@ def _get_letterbox_mapping(window_size: tuple[int, int]) -> tuple[float, int, in
 
 
 def _window_to_canvas_pos(window_pos: tuple[int, int], window_size: tuple[int, int]) -> tuple[int, int] | None:
+    """Transform window coordinates to canvas coordinates (simple stretch, no letterboxing)."""
     mx, my = window_pos
-    scale, offset_x, offset_y = _get_letterbox_mapping(window_size)
-    if scale <= 0:
+    win_w, win_h = window_size
+    
+    if win_w <= 0 or win_h <= 0:
         return None
 
-    x = (mx - offset_x) / scale
-    y = (my - offset_y) / scale
+    # Simple stretch mapping - canvas fills whole window
+    x = mx * BASE_WIDTH / win_w
+    y = my * BASE_HEIGHT / win_h
 
     if x < 0 or y < 0 or x >= BASE_WIDTH or y >= BASE_HEIGHT:
         return None
