@@ -371,7 +371,7 @@ async def main():
         base_dir = str(Path.cwd())
     
     # Music playlist system
-    music_tracks = ["bgm1.ogg", "bgm2.ogg", "bgm3.ogg", "bgm4.ogg", "bgm5.ogg", "bgm6.ogg", "bgm7.ogg"]
+    music_tracks = ["bgm1.mp3", "bgm2.mp3", "bgm3.mp3", "bgm4.mp3", "bgm5.mp3", "bgm6.mp3", "bgm7.mp3"]
     current_track = None
     music_mode = "bgm"  # "bgm" (random playlist) or "disco" (dancefloor)
     
