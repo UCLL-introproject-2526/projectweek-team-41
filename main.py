@@ -339,6 +339,14 @@ async def main():
     drunk_timer = 0.0
     drunk_duration = 5.0  # 5 seconds of drunk effect
     cocktail_hold_duration = 1.0  # Hold cocktail for 1 second before drunk
+    
+    # Dancefloor disco state
+    was_on_dancefloor = False
+    disco_ball_y = -100  # Start above screen
+    disco_ball_target_y = BASE_HEIGHT // 2 - 50
+    disco_ball_lowering = False
+    disco_ray_timer = 0.0
+    disco_music_playing = False
 
     # Token currency system
     tokens = 100  # Starting tokens
@@ -431,6 +439,23 @@ async def main():
         cocktail_img = pygame.transform.smoothscale(cocktail_img, (40, 40))
     except Exception:
         cocktail_img = None
+    
+    # Load disco ball image
+    disco_ball_img = None
+    try:
+        disco_ball_path = os.path.join(base_dir, "assets", "img", "discoball.gif")
+        disco_ball_img = pygame.image.load(disco_ball_path).convert_alpha()
+        disco_ball_img = pygame.transform.smoothscale(disco_ball_img, (100, 100))
+    except Exception as e:
+        print(f"Could not load disco ball: {e}")
+        disco_ball_img = None
+    
+    # Load disco music
+    disco_music_path = None
+    try:
+        disco_music_path = os.path.join(base_dir, "assets", "music", "TECHNOBUNKER.mp3")
+    except Exception:
+        disco_music_path = None
     
     # Transition zones between lobbies
     ZONE_WIDTH = 60
@@ -757,6 +782,82 @@ async def main():
             # Check if player is on the dancefloor (top-right corner)
             on_dancefloor = lobby2_table_topright.collidepoint(player.x, player.y)
             player.set_dancing(on_dancefloor)
+            
+            # Handle disco music and ball when entering/leaving dancefloor
+            if on_dancefloor and not was_on_dancefloor:
+                # Just entered dancefloor - start disco!
+                disco_ball_lowering = True
+                disco_ball_y = -100
+                if disco_music_path and not disco_music_playing:
+                    try:
+                        pygame.mixer.music.stop()
+                        pygame.mixer.music.load(disco_music_path)
+                        pygame.mixer.music.set_volume(music_volume / 100.0)
+                        pygame.mixer.music.play(-1)  # Loop forever
+                        disco_music_playing = True
+                    except Exception as e:
+                        print(f"Could not play disco music: {e}")
+            elif not on_dancefloor and was_on_dancefloor:
+                # Just left dancefloor - stop disco
+                disco_ball_lowering = False
+                disco_ball_y = -100
+                if disco_music_playing:
+                    pygame.mixer.music.stop()
+                    disco_music_playing = False
+                    # Resume normal background music
+                    play_random_track()
+            
+            was_on_dancefloor = on_dancefloor
+            
+            # Animate disco ball lowering
+            if disco_ball_lowering:
+                if disco_ball_y < disco_ball_target_y:
+                    disco_ball_y += 150 * dt  # Lower at 150 pixels per second
+                else:
+                    disco_ball_y = disco_ball_target_y
+            
+            # Update disco ray timer
+            disco_ray_timer += dt
+            
+            # Draw disco light rays when on dancefloor
+            if on_dancefloor:
+                # Draw colorful light rays from disco ball position
+                disco_colors = [
+                    (255, 50, 50),    # Red
+                    (50, 255, 50),    # Green
+                    (50, 50, 255),    # Blue
+                    (255, 255, 50),   # Yellow
+                    (255, 50, 255),   # Magenta
+                    (50, 255, 255),   # Cyan
+                    (255, 150, 50),   # Orange
+                    (150, 50, 255),   # Purple
+                ]
+                ball_center_x = BASE_WIDTH - TABLE_MARGIN - TABLE_WIDTH // 2
+                ball_center_y = int(disco_ball_y) + 50  # Center of ball
+                
+                # Draw 12 rotating rays
+                num_rays = 12
+                ray_rotation = disco_ray_timer * 2  # Rotate 2 radians per second
+                for i in range(num_rays):
+                    angle = (2 * math.pi * i / num_rays) + ray_rotation
+                    ray_length = 600
+                    end_x = ball_center_x + int(math.cos(angle) * ray_length)
+                    end_y = ball_center_y + int(math.sin(angle) * ray_length)
+                    color = disco_colors[i % len(disco_colors)]
+                    
+                    # Draw semi-transparent ray using a surface
+                    ray_surf = pygame.Surface((BASE_WIDTH, BASE_HEIGHT), pygame.SRCALPHA)
+                    pygame.draw.line(ray_surf, (*color, 80), (ball_center_x, ball_center_y), (end_x, end_y), 8)
+                    canvas.blit(ray_surf, (0, 0))
+                
+                # Draw disco ball
+                if disco_ball_img is not None:
+                    ball_x = ball_center_x - 50
+                    ball_y = int(disco_ball_y)
+                    canvas.blit(disco_ball_img, (ball_x, ball_y))
+                    
+                    # Draw string from top to disco ball
+                    pygame.draw.line(canvas, (100, 100, 100), (ball_center_x, 0), (ball_center_x, ball_y), 2)
             
             player.draw(canvas)
             
