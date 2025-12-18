@@ -338,7 +338,7 @@ def main():
         next_track = random.choice(available_tracks)
         current_track = next_track
         try:
-            music_path = os.path.join(base_dir, "music", next_track)
+            music_path = os.path.join(base_dir, "assets", "music", next_track)
             pygame.mixer.music.load(music_path)
             pygame.mixer.music.set_volume(music_volume / 100.0)
             pygame.mixer.music.play()  # Play once, then we'll pick another
@@ -371,14 +371,14 @@ def main():
     interact_near_px = 22.0
     
     try:
-        menu_bg_path = os.path.join(base_dir, "img", "mainmenu.png")
+        menu_bg_path = os.path.join(base_dir, "assets", "img", "mainmenu.png")
         menu_bg = pygame.image.load(menu_bg_path).convert_alpha()
         # Remove fixed scaling here
     except Exception:
         menu_bg = None
 
     try:
-        lobby_bg_path = os.path.join(base_dir, "img", "lobby-bg.png")
+        lobby_bg_path = os.path.join(base_dir, "assets", "img", "lobby-bg.png")
         lobby_bg = pygame.image.load(lobby_bg_path).convert_alpha()
         # Remove fixed scaling here
     except Exception:

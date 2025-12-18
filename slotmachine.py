@@ -340,7 +340,7 @@ class SlotMachine:
 
         for symbol in symbols:
             try:
-                img_path = os.path.join(base_dir, "img", "slotmachine", f"{symbol}.png")
+                img_path = os.path.join(base_dir, "assets", "img", "slotmachine", f"{symbol}.png")
                 img = pygame.image.load(img_path)
                 self.images[symbol] = pygame.transform.scale(img, (SYMBOL_SIZE, SYMBOL_SIZE))
             except Exception:

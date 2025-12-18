@@ -12,7 +12,7 @@ def _get_loading_bg() -> pygame.Surface | None:
     if _LOADING_BG_ORIGINAL is not None:
         return _LOADING_BG_ORIGINAL
 
-    img_path = os.path.join(os.path.dirname(__file__), "img", "outside.png")
+    img_path = os.path.join(os.path.dirname(__file__), "assets", "img", "outside.png")
     try:
         _LOADING_BG_ORIGINAL = pygame.image.load(img_path).convert_alpha()
     except Exception:

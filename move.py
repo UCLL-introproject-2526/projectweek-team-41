@@ -44,7 +44,7 @@ class Player:
 		
 		try:
 			# Load idle/base character image
-			idle_path = os.path.join(base_dir, "img", "standing.png")
+			idle_path = os.path.join(base_dir, "assets", "img", "standing.png")
 			self._img_idle = pygame.image.load(idle_path).convert_alpha()
 			self._img_idle = pygame.transform.smoothscale(self._img_idle, target_size)
 		except Exception:
@@ -52,7 +52,7 @@ class Player:
 		
 		try:
 			# Load left foot walking frame
-			left_path = os.path.join(base_dir, "img", "leftfoot.png")
+			left_path = os.path.join(base_dir, "assets", "img", "leftfoot.png")
 			self._img_left = pygame.image.load(left_path).convert_alpha()
 			self._img_left = pygame.transform.smoothscale(self._img_left, target_size)
 		except Exception:
@@ -60,7 +60,7 @@ class Player:
 		
 		try:
 			# Load right foot walking frame
-			right_path = os.path.join(base_dir, "img", "rightfoot.png")
+			right_path = os.path.join(base_dir, "assets", "img", "rightfoot.png")
 			self._img_right = pygame.image.load(right_path).convert_alpha()
 			self._img_right = pygame.transform.smoothscale(self._img_right, target_size)
 		except Exception:
@@ -73,7 +73,7 @@ class Player:
 		
 		# Load smoke gif frames for emote
 		try:
-			smoke_path = os.path.join(base_dir, "img", "smoke.gif")
+			smoke_path = os.path.join(base_dir, "assets", "img", "smoke.gif")
 			smoke_img = pygame.image.load(smoke_path)
 			# For GIF, we try to load multiple frames if PIL is available
 			try:
