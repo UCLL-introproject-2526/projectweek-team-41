@@ -11,6 +11,7 @@ from roulette import draw_roulette_scene, spin_roulette, reset_roulette, change_
 from slotmachine import draw_slotmachine_scene, spin_slotmachine, change_slot_bet_amount
 from luckywheel import LuckyWheel, draw_spin_button, draw_winner_announcement
 from blackjack import draw_blackjack_scene, handle_blackjack_click, handle_blackjack_keypress, change_blackjack_bet
+from higherlower import draw_higherlower_scene, handle_higherlower_click, handle_higherlower_keypress, change_higherlower_bet
 
 # Initialize Pygame
 pygame.init()
@@ -85,6 +86,7 @@ pygame.display.set_caption("Merge Casino")
 
 CLOCK = pygame.time.Clock()
 FONT = pygame.font.SysFont(None, 48)
+FONT_TITLE = pygame.font.SysFont(None, 144)  # 3x larger for Main Menu
 FONT_SMALL = pygame.font.SysFont(None, 32)
 FONT_TIP = pygame.font.SysFont(None, 24)
 FONT_GAME_HINT = pygame.font.SysFont(None, 28)
@@ -205,6 +207,33 @@ def draw_center_text(surface: pygame.Surface, text: str, y: int, font=FONT, colo
     surface.blit(surf, rect)
 
 
+def draw_rainbow_text(surface: pygame.Surface, text: str, y: int, font=FONT, time_offset: float = 0):
+    """Draw text with rainbow colors that loop over time."""
+    import colorsys
+    
+    # Render each character separately to get their widths
+    char_surfaces = []
+    total_width = 0
+    for i, char in enumerate(text):
+        # Calculate hue based on character position and time
+        hue = ((i / len(text)) + time_offset) % 1.0
+        rgb = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+        color = (int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255))
+        char_surf = font.render(char, True, color)
+        char_surfaces.append(char_surf)
+        total_width += char_surf.get_width()
+    
+    # Calculate starting x position to center the text
+    start_x = (surface.get_width() - total_width) // 2
+    current_x = start_x
+    
+    # Blit each character
+    for char_surf in char_surfaces:
+        char_rect = char_surf.get_rect(topleft=(current_x, y - char_surf.get_height() // 2))
+        surface.blit(char_surf, char_rect)
+        current_x += char_surf.get_width()
+
+
 def draw_luckywheel_scene(surface: pygame.Surface, game_state: dict, font: pygame.font.Font) -> dict:
     """Draw and update lucky wheel game on the given surface."""
     if "initialized" not in game_state:
@@ -297,6 +326,7 @@ async def main():
     slotmachine_state = {}
     luckywheel_state = {}  # State for lucky wheel game
     blackjack_state = {}  # State for blackjack game
+    higherlower_state = {}  # State for higher/lower game
 
     # Token currency system
     tokens = 100  # Starting tokens
@@ -343,7 +373,7 @@ async def main():
     # Start playing first random track
     play_random_track()
     
-    # Table size and positions (4 corners)
+    # Table size and positions (4 corners + center)
     TABLE_WIDTH = 370
     TABLE_HEIGHT = 250
     TABLE_MARGIN = 0
@@ -356,9 +386,11 @@ async def main():
     table_roulette = pygame.Rect(TABLE_MARGIN, BASE_HEIGHT - TABLE_MARGIN - TABLE_HEIGHT, TABLE_WIDTH, TABLE_HEIGHT)
     # Bottom-right: Lucky Wheel
     table_wheel = pygame.Rect(BASE_WIDTH - TABLE_MARGIN - TABLE_WIDTH, BASE_HEIGHT - TABLE_MARGIN - TABLE_HEIGHT, TABLE_WIDTH, TABLE_HEIGHT)
+    # Center: Higher or Lower
+    table_higherlower = pygame.Rect(BASE_WIDTH // 2 - 80, BASE_HEIGHT // 2 - 60, 160, 120)
     
     # All tables for collision/rendering
-    all_tables = [table_slots, table_blackjack, table_roulette, table_wheel]
+    all_tables = [table_slots, table_blackjack, table_roulette, table_wheel, table_higherlower]
     interact_near_px = 22.0
     
     try:
@@ -411,6 +443,8 @@ async def main():
                 luckywheel_state["tokens"] = luckywheel_state.get("tokens", 0) + 25
             if scene == "blackjack" and "tokens" in blackjack_state:
                 blackjack_state["tokens"] = blackjack_state.get("tokens", 0) + 25
+            if scene == "higherlower" and "tokens" in higherlower_state:
+                higherlower_state["tokens"] = higherlower_state.get("tokens", 0) + 25
 
         window_mouse_pos = pygame.mouse.get_pos()
         mouse_pos = _window_to_canvas_pos(window_mouse_pos, window.get_size())
@@ -455,6 +489,9 @@ async def main():
                 elif scene == "blackjack":
                     scene = "game"
                     blackjack_state = {}
+                elif scene == "higherlower":
+                    scene = "game"
+                    higherlower_state = {}
                 elif scene in ("game", "loading"):
                     scene = "menu"
                     player = None
@@ -476,6 +513,9 @@ async def main():
                     elif is_near_table(player, table_blackjack):
                         scene = "blackjack"
                         blackjack_state = {"tokens": tokens}
+                    elif is_near_table(player, table_higherlower):
+                        scene = "higherlower"
+                        higherlower_state = {"tokens": tokens}
 
             # Smoke emote in lobby (B key)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_b:
@@ -525,6 +565,10 @@ async def main():
             if event.type == pygame.KEYDOWN and scene == "blackjack":
                 blackjack_state = handle_blackjack_keypress(blackjack_state, event.key)
 
+            # Higher/Lower controls
+            if event.type == pygame.KEYDOWN and scene == "higherlower":
+                higherlower_state = handle_higherlower_keypress(higherlower_state, event.key)
+
             # Settings slider event handling
             if scene == "settings":
                 if volume_slider.handle_event(event, mouse_pos):
@@ -558,6 +602,8 @@ async def main():
                         luckywheel_state = spin_luckywheel(luckywheel_state)
                 elif scene == "blackjack":
                     blackjack_state = handle_blackjack_click(blackjack_state, mouse_pos)
+                elif scene == "higherlower":
+                    higherlower_state = handle_higherlower_click(higherlower_state, mouse_pos)
 
         # Draw
         canvas.fill(BG)
@@ -572,7 +618,8 @@ async def main():
                 canvas.blit(stretched_bg, (0, 0))
             else:
                 canvas.fill(BG)
-            draw_center_text(canvas, "Main Menu", 180, font=FONT)
+            rainbow_time = pygame.time.get_ticks() / 1000.0  # Convert to seconds
+            draw_rainbow_text(canvas, "Main Menu", 200, font=FONT_TITLE, time_offset=rainbow_time)
             start_btn.draw(canvas, mouse_pos)
             settings_btn.draw(canvas, mouse_pos)
             leave_btn.draw(canvas, mouse_pos)
@@ -632,6 +679,10 @@ async def main():
             blackjack_state = draw_blackjack_scene(canvas, blackjack_state, font=FONT)
             tokens = blackjack_state.get("tokens", tokens)
 
+        elif scene == "higherlower":
+            higherlower_state = draw_higherlower_scene(canvas, higherlower_state, font=FONT)
+            tokens = higherlower_state.get("tokens", tokens)
+
         else:  # scene == "game"
             if lobby_bg is not None:
                 stretched_bg = pygame.transform.smoothscale(lobby_bg, (BASE_WIDTH, BASE_HEIGHT))
@@ -665,6 +716,8 @@ async def main():
                 near_table = table_wheel
             elif is_near_table(player, table_blackjack):
                 near_table = table_blackjack
+            elif is_near_table(player, table_higherlower):
+                near_table = table_higherlower
             
             if near_table is not None:
                 popup = pygame.Rect(0, 0, 26, 26)
