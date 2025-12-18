@@ -42,6 +42,83 @@ STATE_DEALER_TURN = 2
 STATE_GAME_OVER = 3
 
 
+# =============================================================================
+# SUIT DRAWING FUNCTIONS
+# =============================================================================
+
+def draw_heart(surface, x, y, size, color):
+    """Draw a heart symbol at (x, y) with given size."""
+    points = []
+    for i in range(360):
+        angle = math.radians(i)
+        hx = size * (16 * math.sin(angle) ** 3)
+        hy = -size * (13 * math.cos(angle) - 5 * math.cos(2 * angle) - 2 * math.cos(3 * angle) - math.cos(4 * angle))
+        points.append((x + hx, y + hy))
+    if len(points) > 2:
+        pygame.draw.polygon(surface, color, points)
+
+
+def draw_diamond(surface, x, y, size, color):
+    """Draw a diamond symbol at (x, y) with given size."""
+    points = [
+        (x, y - size * 12),
+        (x + size * 8, y),
+        (x, y + size * 12),
+        (x - size * 8, y)
+    ]
+    pygame.draw.polygon(surface, color, points)
+
+
+def draw_spade(surface, x, y, size, color):
+    """Draw a spade symbol at (x, y) with given size."""
+    # Draw inverted heart shape for top of spade
+    points = []
+    for i in range(360):
+        angle = math.radians(i)
+        hx = size * (16 * math.sin(angle) ** 3)
+        hy = size * (13 * math.cos(angle) - 5 * math.cos(2 * angle) - 2 * math.cos(3 * angle) - math.cos(4 * angle))
+        points.append((x + hx, y - size * 5 + hy))
+    if len(points) > 2:
+        pygame.draw.polygon(surface, color, points)
+    # Draw stem
+    stem_points = [
+        (x - size * 3, y + size * 8),
+        (x + size * 3, y + size * 8),
+        (x + size * 2, y + size * 2),
+        (x - size * 2, y + size * 2)
+    ]
+    pygame.draw.polygon(surface, color, stem_points)
+
+
+def draw_club(surface, x, y, size, color):
+    """Draw a club symbol at (x, y) with given size."""
+    # Three circles for club
+    radius = int(size * 6)
+    pygame.draw.circle(surface, color, (int(x), int(y - size * 6)), radius)
+    pygame.draw.circle(surface, color, (int(x - size * 6), int(y + size * 2)), radius)
+    pygame.draw.circle(surface, color, (int(x + size * 6), int(y + size * 2)), radius)
+    # Stem
+    stem_points = [
+        (x - size * 3, y + size * 10),
+        (x + size * 3, y + size * 10),
+        (x + size * 2, y + size * 2),
+        (x - size * 2, y + size * 2)
+    ]
+    pygame.draw.polygon(surface, color, stem_points)
+
+
+def draw_suit_icon(surface, suit, x, y, size, color):
+    """Draw the appropriate suit icon."""
+    if suit == '♥':
+        draw_heart(surface, x, y, size, color)
+    elif suit == '♦':
+        draw_diamond(surface, x, y, size, color)
+    elif suit == '♠':
+        draw_spade(surface, x, y, size, color)
+    elif suit == '♣':
+        draw_club(surface, x, y, size, color)
+
+
 class CasinoFloater:
     """Floating casino elements like chips, cards, dice"""
     
@@ -275,29 +352,33 @@ class Card:
         pygame.draw.rect(screen, (0, 0, 0, 100), shadow_rect, border_radius=8)
         
         if show_front and self.face_up:
-            # Draw card front
+            # Draw card front with golden border
             pygame.draw.rect(screen, WHITE, card_rect, border_radius=8)
-            pygame.draw.rect(screen, (100, 100, 100), card_rect, 2, border_radius=8)
+            pygame.draw.rect(screen, (218, 165, 32), card_rect, 3, border_radius=8)
+            pygame.draw.rect(screen, (200, 150, 20), card_rect.inflate(-4, -4), 1, border_radius=6)
             
             # Only draw content if card is wide enough
             if current_width > CARD_WIDTH * 0.7:
                 # Card content
                 color = RED if self.is_red() else BLACK
                 
-                # Rank in corners
+                # Rank in top-left corner
                 rank_text = font_large.render(self.rank, True, color)
                 rank_rect = rank_text.get_rect(topleft=(card_rect.left + 5, card_rect.top + 5))
                 screen.blit(rank_text, rank_rect)
                 
-                # Suit in center
-                suit_text = font_large.render(self.suit, True, color)
-                suit_rect = suit_text.get_rect(center=card_rect.center)
-                screen.blit(suit_text, suit_rect)
+                # Small suit icon under rank in top-left
+                draw_suit_icon(screen, self.suit, card_rect.left + 14, card_rect.top + 38, 0.4, color)
                 
-                # Suit under rank
-                small_suit = font_small.render(self.suit, True, color)
-                small_rect = small_suit.get_rect(topleft=(card_rect.left + 5, card_rect.top + 25))
-                screen.blit(small_suit, small_rect)
+                # Large suit icon in center
+                draw_suit_icon(screen, self.suit, card_rect.centerx, card_rect.centery, 1.2, color)
+                
+                # Decorative corner elements (gold dots)
+                corner_color = (218, 165, 32)
+                pygame.draw.circle(screen, corner_color, (card_rect.left + 6, card_rect.top + 6), 2)
+                pygame.draw.circle(screen, corner_color, (card_rect.right - 6, card_rect.top + 6), 2)
+                pygame.draw.circle(screen, corner_color, (card_rect.left + 6, card_rect.bottom - 6), 2)
+                pygame.draw.circle(screen, corner_color, (card_rect.right - 6, card_rect.bottom - 6), 2)
         else:
             # Draw card back (casino pattern)
             pygame.draw.rect(screen, CASINO_RED, card_rect, border_radius=8)
