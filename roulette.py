@@ -1002,6 +1002,10 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
             win_rect = win_surf.get_rect(center=(center_x, surf_h - 50))
             surface.blit(win_surf, win_rect)
     
+    # Draw ESC hint at bottom right
+    esc_hint = hint_font.render("ESC - Back to Casino", True, (180, 180, 180))
+    surface.blit(esc_hint, (surf_w - 160, surf_h - 25))
+    
     # Draw win VFX on top
     for starburst in game_state.get("starbursts", []):
         starburst.draw(surface)
