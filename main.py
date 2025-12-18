@@ -348,6 +348,19 @@ async def main():
     disco_ball_lowering = False
     disco_ray_timer = 0.0
     disco_music_playing = False
+    disco_flash_timer = 0.0
+    disco_flash_index = 0
+    disco_pulse_timer = 0.0
+    disco_flash_colors = [
+        (255, 50, 50),    # Red
+        (50, 255, 50),    # Green
+        (50, 50, 255),    # Blue
+        (255, 255, 50),   # Yellow
+        (255, 50, 255),   # Magenta
+        (50, 255, 255),   # Cyan
+        (255, 150, 50),   # Orange
+        (150, 50, 255),   # Purple
+    ]
 
     # Token currency system
     tokens = 100  # Starting tokens
@@ -965,6 +978,17 @@ async def main():
                 dance_hint = FONT_TIP.render("~ DANCEFLOOR ~", True, (255, 100, 255))
                 dance_rect = dance_hint.get_rect(center=(lobby2_table_topright.centerx, lobby2_table_topright.bottom + 20))
                 canvas.blit(dance_hint, dance_rect)
+                
+                # Disco color flash effect
+                disco_flash_timer += dt
+                if disco_flash_timer >= 0.15:  # Flash every 0.15 seconds
+                    disco_flash_timer = 0.0
+                    disco_flash_index = (disco_flash_index + 1) % len(disco_flash_colors)
+                
+                flash_color = disco_flash_colors[disco_flash_index]
+                flash_overlay = pygame.Surface((BASE_WIDTH, BASE_HEIGHT), pygame.SRCALPHA)
+                flash_overlay.fill((*flash_color, 40))  # Semi-transparent color flash
+                canvas.blit(flash_overlay, (0, 0))
             
             # Show arrow hint to go back
             hint_surf = FONT_TIP.render("< Back to Lobby 1", True, (200, 200, 200))
@@ -1025,6 +1049,24 @@ async def main():
 
         # Present surface (may be post-processed)
         present_canvas = canvas
+        
+        # Apply disco pulse effect when on dancefloor
+        if scene == "lobby2" and was_on_dancefloor:
+            disco_pulse_timer += dt
+            # Pulse scale oscillates between 1.0 and 1.05 using sine wave
+            pulse_scale = 1.0 + 0.05 * abs(math.sin(disco_pulse_timer * 12))  # 12 = pulse speed
+            
+            # Scale canvas from center
+            pulse_width = int(BASE_WIDTH * pulse_scale)
+            pulse_height = int(BASE_HEIGHT * pulse_scale)
+            pulsed_canvas = pygame.transform.smoothscale(present_canvas, (pulse_width, pulse_height))
+            
+            # Create a new surface and blit the scaled canvas centered
+            pulse_result = pygame.Surface((BASE_WIDTH, BASE_HEIGHT))
+            offset_x = (pulse_width - BASE_WIDTH) // 2
+            offset_y = (pulse_height - BASE_HEIGHT) // 2
+            pulse_result.blit(pulsed_canvas, (-offset_x, -offset_y))
+            present_canvas = pulse_result
 
         # Apply drunk effect if active (greenish tint + wave distortion)
         # Important: do NOT overwrite `canvas` across frames, otherwise the tint accumulates
