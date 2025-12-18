@@ -65,14 +65,12 @@ def _window_to_canvas_pos(window_pos: tuple[int, int], window_size: tuple[int, i
 
 
 def _present(canvas: pygame.Surface, window: pygame.Surface) -> None:
-    window.fill(BG)
+    # Stretch the canvas to fill the window (no letterboxing)
     win_size = window.get_size()
-    scale, offset_x, offset_y = _get_letterbox_mapping(win_size)
-    render_size = (int(BASE_WIDTH * scale), int(BASE_HEIGHT * scale))
-    if render_size[0] <= 0 or render_size[1] <= 0:
-        return
-    scaled = pygame.transform.smoothscale(canvas, render_size)
-    window.blit(scaled, (offset_x, offset_y))
+    scaled = pygame.transform.smoothscale(canvas, win_size)
+    window.blit(scaled, (0, 0))
+
+
 pygame.display.set_caption("Merge Casino")
 
 CLOCK = pygame.time.Clock()
@@ -375,14 +373,14 @@ def main():
     try:
         menu_bg_path = os.path.join(base_dir, "img", "mainmenu.png")
         menu_bg = pygame.image.load(menu_bg_path).convert_alpha()
-        menu_bg = pygame.transform.smoothscale(menu_bg, (BASE_WIDTH, BASE_HEIGHT))
+        # Remove fixed scaling here
     except Exception:
         menu_bg = None
-    
+
     try:
         lobby_bg_path = os.path.join(base_dir, "img", "lobby-bg.png")
         lobby_bg = pygame.image.load(lobby_bg_path).convert_alpha()
-        lobby_bg = pygame.transform.smoothscale(lobby_bg, (BASE_WIDTH, BASE_HEIGHT))
+        # Remove fixed scaling here
     except Exception:
         lobby_bg = None
 
@@ -564,9 +562,16 @@ def main():
         # Draw
         canvas.fill(BG)
 
+        # Get current window size for scaling backgrounds
+        win_w, win_h = window.get_size()
+
         if scene == "menu":
             if menu_bg is not None:
-                canvas.blit(menu_bg, (0, 0))
+                # Stretch background to window size of the canvas
+                stretched_bg = pygame.transform.smoothscale(menu_bg, (BASE_WIDTH, BASE_HEIGHT))
+                canvas.blit(stretched_bg, (0, 0))
+            else:
+                canvas.fill(BG)
             draw_center_text(canvas, "Main Menu", 180, font=FONT)
             start_btn.draw(canvas, mouse_pos)
             settings_btn.draw(canvas, mouse_pos)
@@ -575,8 +580,10 @@ def main():
 
         elif scene == "settings":
             if menu_bg is not None:
-                canvas.blit(menu_bg, (0, 0))
-            
+                stretched_bg = pygame.transform.smoothscale(menu_bg, (BASE_WIDTH, BASE_HEIGHT))
+                canvas.blit(stretched_bg, (0, 0))
+            else:
+                canvas.fill(BG)
             # Draw settings panel background
             pygame.draw.rect(canvas, (35, 40, 50), settings_panel_rect, border_radius=16)
             pygame.draw.rect(canvas, (60, 70, 90), settings_panel_rect, width=3, border_radius=16)
@@ -622,9 +629,9 @@ def main():
             tokens = luckywheel_state.get("tokens", tokens)
 
         else:  # scene == "game"
-            # Draw lobby background or fallback color
             if lobby_bg is not None:
-                canvas.blit(lobby_bg, (0, 0))
+                stretched_bg = pygame.transform.smoothscale(lobby_bg, (BASE_WIDTH, BASE_HEIGHT))
+                canvas.blit(stretched_bg, (0, 0))
             else:
                 canvas.fill((40, 60, 80))
 
@@ -663,6 +670,7 @@ def main():
                 e_rect = e_surf.get_rect(center=popup.center)
                 canvas.blit(e_surf, e_rect)
 
+        # Now always stretch the canvas to fill the window
         _present(canvas, window)
         pygame.display.flip()
 
