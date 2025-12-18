@@ -3,6 +3,7 @@ import os
 import json
 import random
 import asyncio
+import math
 import pygame
 from typing import Optional, Tuple, List, Dict
 from loading import draw_game_screen
@@ -331,6 +332,14 @@ async def main():
     blackjack_state = {}  # State for blackjack game
     higherlower_state = {}  # State for higher/lower game
 
+    # Cocktail/Drunk effect state
+    holding_cocktail = False
+    cocktail_timer = 0.0
+    drunk_active = False
+    drunk_timer = 0.0
+    drunk_duration = 5.0  # 5 seconds of drunk effect
+    cocktail_hold_duration = 1.0  # Hold cocktail for 1 second before drunk
+
     # Token currency system
     tokens = 100  # Starting tokens
     token_timer = 0.0  # Timer for passive token income (25 tokens per minute)
@@ -346,6 +355,7 @@ async def main():
 
     menu_bg = None
     lobby_bg = None
+    lobby2_bg = None
     try:
         base_dir = os.path.dirname(__file__)
     except:
@@ -389,11 +399,9 @@ async def main():
     table_roulette = pygame.Rect(TABLE_MARGIN, BASE_HEIGHT - TABLE_MARGIN - TABLE_HEIGHT, TABLE_WIDTH, TABLE_HEIGHT)
     # Bottom-right: Lucky Wheel
     table_wheel = pygame.Rect(BASE_WIDTH - TABLE_MARGIN - TABLE_WIDTH, BASE_HEIGHT - TABLE_MARGIN - TABLE_HEIGHT, TABLE_WIDTH, TABLE_HEIGHT)
-    # Center: Higher or Lower
-    table_higherlower = pygame.Rect(BASE_WIDTH // 2 - 80, BASE_HEIGHT // 2 - 60, 160, 120)
     
     # All tables for collision/rendering
-    all_tables = [table_slots, table_blackjack, table_roulette, table_wheel, table_higherlower]
+    all_tables = [table_slots, table_blackjack, table_roulette, table_wheel]
     interact_near_px = 22.0
     
     try:
@@ -406,9 +414,33 @@ async def main():
     try:
         lobby_bg_path = os.path.join(base_dir, "assets", "img", "lobby-bg.png")
         lobby_bg = pygame.image.load(lobby_bg_path).convert_alpha()
-        # Remove fixed scaling here
     except Exception:
         lobby_bg = None
+    
+    try:
+        lobby2_bg_path = os.path.join(base_dir, "assets", "img", "bg2 (2).png")
+        lobby2_bg = pygame.image.load(lobby2_bg_path).convert_alpha()
+    except Exception:
+        lobby2_bg = None
+    
+    # Load cocktail image
+    cocktail_img = None
+    try:
+        cocktail_path = os.path.join(base_dir, "assets", "img", "cocktail.png")
+        cocktail_img = pygame.image.load(cocktail_path).convert_alpha()
+        cocktail_img = pygame.transform.smoothscale(cocktail_img, (40, 40))
+    except Exception:
+        cocktail_img = None
+    
+    # Transition zones between lobbies
+    ZONE_WIDTH = 60
+    
+    # Lobby 2 tables (same size/positions as lobby 1)
+    lobby2_table_topleft = pygame.Rect(TABLE_MARGIN, TABLE_MARGIN, TABLE_WIDTH, TABLE_HEIGHT)
+    lobby2_table_topright = pygame.Rect(BASE_WIDTH - TABLE_MARGIN - TABLE_WIDTH, TABLE_MARGIN, TABLE_WIDTH, TABLE_HEIGHT)
+    lobby2_table_bottomleft = pygame.Rect(TABLE_MARGIN, BASE_HEIGHT - TABLE_MARGIN - TABLE_HEIGHT, TABLE_WIDTH, TABLE_HEIGHT)
+    lobby2_table_bottomright = pygame.Rect(BASE_WIDTH - TABLE_MARGIN - TABLE_WIDTH, BASE_HEIGHT - TABLE_MARGIN - TABLE_HEIGHT, TABLE_WIDTH, TABLE_HEIGHT)
+    lobby2_tables = [lobby2_table_topleft, lobby2_table_topright, lobby2_table_bottomleft, lobby2_table_bottomright]
 
     btn_width, btn_height = 200, 60
     spacing = 40
@@ -449,6 +481,19 @@ async def main():
             if scene == "higherlower" and "tokens" in higherlower_state:
                 higherlower_state["tokens"] = higherlower_state.get("tokens", 0) + 25
 
+        # Update cocktail/drunk timers
+        if holding_cocktail:
+            cocktail_timer += dt
+            if cocktail_timer >= cocktail_hold_duration:
+                holding_cocktail = False
+                drunk_active = True
+                drunk_timer = 0.0
+        
+        if drunk_active:
+            drunk_timer += dt
+            if drunk_timer >= drunk_duration:
+                drunk_active = False
+
         window_mouse_pos = pygame.mouse.get_pos()
         mouse_pos = _window_to_canvas_pos(window_mouse_pos, window.get_size())
         if mouse_pos is None:
@@ -478,11 +523,10 @@ async def main():
                 if scene == "settings":
                     scene = "menu"
                 elif scene == "testscene":
-                    # Terug naar de blauwe map (game) i.p.v. menu
                     scene = "game"
                 elif scene == "roulette":
                     scene = "game"
-                    roulette_state = {}  # Reset roulette when leaving
+                    roulette_state = {}
                 elif scene == "slotmachine":
                     scene = "game"
                     slotmachine_state = {}
@@ -493,8 +537,12 @@ async def main():
                     scene = "game"
                     blackjack_state = {}
                 elif scene == "higherlower":
-                    scene = "game"
+                    scene = "lobby2"
+                    player = Player((BASE_WIDTH - 80, BASE_HEIGHT - 80))
                     higherlower_state = {}
+                elif scene == "lobby2":
+                    scene = "game"
+                    player = Player((BASE_WIDTH - 80, BASE_HEIGHT // 2))
                 elif scene in ("game", "loading"):
                     scene = "menu"
                     player = None
@@ -516,13 +564,19 @@ async def main():
                     elif is_near_table(player, table_blackjack):
                         scene = "blackjack"
                         blackjack_state = {"tokens": tokens}
-                    elif is_near_table(player, table_higherlower):
+                elif scene == "lobby2":
+                    # Bottom-right: Higher or Lower
+                    if is_near_table(player, lobby2_table_bottomright):
                         scene = "higherlower"
                         higherlower_state = {"tokens": tokens}
+                    # Top-left: Bar stand (cocktail)
+                    elif is_near_table(player, lobby2_table_topleft) and not holding_cocktail and not drunk_active:
+                        holding_cocktail = True
+                        cocktail_timer = 0.0
 
             # Smoke emote in lobby (B key)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_b:
-                if scene == "game" and player is not None:
+                if scene in ("game", "lobby2") and player is not None:
                     player.trigger_emote()
 
             # Roulette controls
@@ -686,6 +740,77 @@ async def main():
             higherlower_state = draw_higherlower_scene(canvas, higherlower_state, font=FONT)
             tokens = higherlower_state.get("tokens", tokens)
 
+        elif scene == "lobby2":
+            # Second lobby with bg2 background
+            if lobby2_bg is not None:
+                stretched_bg = pygame.transform.smoothscale(lobby2_bg, (BASE_WIDTH, BASE_HEIGHT))
+                canvas.blit(stretched_bg, (0, 0))
+            else:
+                canvas.fill((60, 40, 80))
+
+            if player is None:
+                player = Player((80, BASE_HEIGHT // 2))
+
+            keys = pygame.key.get_pressed()
+            player.update(dt, keys, canvas.get_rect(), obstacles=[])
+            
+            # Check if player is on the dancefloor (top-right corner)
+            on_dancefloor = lobby2_table_topright.collidepoint(player.x, player.y)
+            player.set_dancing(on_dancefloor)
+            
+            player.draw(canvas)
+            
+            # Draw cocktail when holding
+            if holding_cocktail and cocktail_img is not None:
+                cocktail_x = int(player.x + 15 if player._facing_right else player.x - 15 - 40)
+                cocktail_y = int(player.y - 10)
+                canvas.blit(cocktail_img, (cocktail_x, cocktail_y))
+            
+            # Check if player goes to left edge -> back to lobby1
+            if player.x < ZONE_WIDTH:
+                player.set_dancing(False)  # Stop dancing when leaving
+                scene = "game"
+                player = Player((BASE_WIDTH - 80, BASE_HEIGHT // 2))
+
+            # Draw token counter
+            token_text = f"Tokens: {tokens}"
+            token_surf = FONT_SMALL.render(token_text, True, (255, 215, 0))
+            token_rect = token_surf.get_rect(midtop=(BASE_WIDTH // 2, 10))
+            pygame.draw.rect(canvas, (30, 30, 30), token_rect.inflate(20, 10), border_radius=8)
+            canvas.blit(token_surf, token_rect)
+            
+            # Show 'E' popup when near bottom-right table (Higher/Lower)
+            if is_near_table(player, lobby2_table_bottomright):
+                popup = pygame.Rect(0, 0, 26, 26)
+                popup.center = (int(player.x), int(player.y - (player.radius + 18)))
+                popup.clamp_ip(canvas.get_rect())
+                pygame.draw.rect(canvas, (20, 20, 25), popup, border_radius=4)
+                pygame.draw.rect(canvas, (255, 255, 255), popup, width=2, border_radius=4)
+                e_surf = FONT_TIP.render("E", True, (255, 255, 255))
+                e_rect = e_surf.get_rect(center=popup.center)
+                canvas.blit(e_surf, e_rect)
+            
+            # Show 'E' popup when near top-left bar (Cocktail)
+            if is_near_table(player, lobby2_table_topleft) and not holding_cocktail and not drunk_active:
+                popup = pygame.Rect(0, 0, 26, 26)
+                popup.center = (int(player.x), int(player.y - (player.radius + 18)))
+                popup.clamp_ip(canvas.get_rect())
+                pygame.draw.rect(canvas, (20, 20, 25), popup, border_radius=4)
+                pygame.draw.rect(canvas, (255, 255, 255), popup, width=2, border_radius=4)
+                e_surf = FONT_TIP.render("E", True, (255, 255, 255))
+                e_rect = e_surf.get_rect(center=popup.center)
+                canvas.blit(e_surf, e_rect)
+            
+            # Show dancefloor hint when on it
+            if on_dancefloor:
+                dance_hint = FONT_TIP.render("~ DANCEFLOOR ~", True, (255, 100, 255))
+                dance_rect = dance_hint.get_rect(center=(lobby2_table_topright.centerx, lobby2_table_topright.bottom + 20))
+                canvas.blit(dance_hint, dance_rect)
+            
+            # Show arrow hint to go back
+            hint_surf = FONT_TIP.render("< Back to Lobby 1", True, (200, 200, 200))
+            canvas.blit(hint_surf, (10, BASE_HEIGHT // 2 - 10))
+
         else:  # scene == "game"
             if lobby_bg is not None:
                 stretched_bg = pygame.transform.smoothscale(lobby_bg, (BASE_WIDTH, BASE_HEIGHT))
@@ -699,6 +824,11 @@ async def main():
             keys = pygame.key.get_pressed()
             player.update(dt, keys, canvas.get_rect(), obstacles=[])
             player.draw(canvas)
+            
+            # Check if player goes to right edge -> lobby2
+            if player.x > BASE_WIDTH - ZONE_WIDTH:
+                scene = "lobby2"
+                player = Player((80, BASE_HEIGHT // 2))
 
             # Tables are invisible interaction zones (no collision)
 
@@ -708,6 +838,10 @@ async def main():
             token_rect = token_surf.get_rect(midtop=(BASE_WIDTH // 2, 10))
             pygame.draw.rect(canvas, (30, 30, 30), token_rect.inflate(20, 10), border_radius=8)
             canvas.blit(token_surf, token_rect)
+            
+            # Show arrow hint to go to lobby2
+            hint_surf = FONT_TIP.render("Lobby 2 >", True, (200, 200, 200))
+            canvas.blit(hint_surf, (BASE_WIDTH - 80, BASE_HEIGHT // 2 - 10))
 
             # Show 'E' popup when near any interactive table
             near_table = None
@@ -719,8 +853,6 @@ async def main():
                 near_table = table_wheel
             elif is_near_table(player, table_blackjack):
                 near_table = table_blackjack
-            elif is_near_table(player, table_higherlower):
-                near_table = table_higherlower
             
             if near_table is not None:
                 popup = pygame.Rect(0, 0, 26, 26)
@@ -731,6 +863,32 @@ async def main():
                 e_surf = FONT_TIP.render("E", True, (255, 255, 255))
                 e_rect = e_surf.get_rect(center=popup.center)
                 canvas.blit(e_surf, e_rect)
+
+        # Apply drunk effect if active (greenish tint + wave distortion)
+        if drunk_active:
+            drunk_canvas = pygame.Surface((BASE_WIDTH, BASE_HEIGHT))
+            wave_amplitude = 8  # How far pixels shift
+            wave_frequency = 0.03  # How tight the waves are
+            time_factor = drunk_timer * 5  # Speed of wave animation
+            
+            # Use efficient row-by-row blitting instead of pixel-by-pixel
+            for y in range(BASE_HEIGHT):
+                offset = int(wave_amplitude * math.sin(wave_frequency * y + time_factor))
+                # Blit the entire row with offset
+                drunk_canvas.blit(canvas, (offset, y), (0, y, BASE_WIDTH, 1))
+                # Fill gaps on edges
+                if offset > 0:
+                    drunk_canvas.blit(canvas, (0, y), (BASE_WIDTH - offset, y, offset, 1))
+                elif offset < 0:
+                    drunk_canvas.blit(canvas, (BASE_WIDTH + offset, y), (0, y, -offset, 1))
+            
+            # Apply green tint overlay
+            green_overlay = pygame.Surface((BASE_WIDTH, BASE_HEIGHT))
+            green_overlay.fill((0, 100, 0))
+            green_overlay.set_alpha(70)
+            drunk_canvas.blit(green_overlay, (0, 0))
+            
+            canvas = drunk_canvas
 
         # Now always stretch the canvas to fill the window
         _present(canvas, window)

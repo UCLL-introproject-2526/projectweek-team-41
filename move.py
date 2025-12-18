@@ -20,6 +20,7 @@ class Player:
 		self._walk_frame = 0
 
 		self._is_moving = False
+		self._facing_right = True  # Track which direction player is facing
 		
 		# Emote state
 		self._emote_active = False
@@ -29,6 +30,12 @@ class Player:
 		self._smoke_frame_index = 0
 		self._smoke_frame_timer = 0.0
 		self._smoke_frame_delay = 0.1  # seconds per frame
+		
+		# Dancing state (mirror flip)
+		self._is_dancing = False
+		self._dance_timer = 0.0
+		self._dance_flip_interval = 0.5  # 2 times per second = 0.5s interval
+		self._dance_flipped = False
 		
 		# Load character images
 		self._load_images()
@@ -89,6 +96,13 @@ class Player:
 			self._emote_timer = 0.0
 			self._smoke_frame_index = 0
 			self._smoke_frame_timer = 0.0
+
+	def set_dancing(self, dancing: bool) -> None:
+		"""Set whether the player is on the dancefloor."""
+		self._is_dancing = dancing
+		if not dancing:
+			self._dance_flipped = False
+			self._dance_timer = 0.0
 
 	def _get_move_vector_from_keys(self, keys: pygame.key.ScancodeWrapper) -> tuple[float, float]:
 		# WASD (QWERTY) + ZQSD (AZERTY) + pijltjestoetsen
@@ -163,8 +177,21 @@ class Player:
 			if self._emote_timer >= self._emote_duration:
 				self._emote_active = False
 		
+		# Update dance timer (mirror flip 2 times per second)
+		if self._is_dancing:
+			self._dance_timer += dt
+			if self._dance_timer >= self._dance_flip_interval:
+				self._dance_timer -= self._dance_flip_interval
+				self._dance_flipped = not self._dance_flipped
+		
 		dx, dy = self._get_move_vector_from_keys(keys)
 		self._is_moving = (dx != 0 or dy != 0)
+		
+		# Update facing direction based on horizontal movement
+		if dx > 0:
+			self._facing_right = True
+		elif dx < 0:
+			self._facing_right = False
 
 		if self._is_moving:
 			self.x += dx * self.speed * dt
@@ -198,6 +225,14 @@ class Player:
 		else:
 			img = self._img_left if self._walk_frame == 0 else self._img_right
 		
+		# Flip sprite based on facing direction (sprites face right by default)
+		if img is not None and not self._facing_right:
+			img = pygame.transform.flip(img, True, False)
+		
+		# Apply dance flip if on dancefloor (overrides facing direction)
+		if img is not None and self._is_dancing and self._dance_flipped:
+			img = pygame.transform.flip(img, True, False)
+		
 		# Draw image if available, otherwise fall back to colored circle
 		if img is not None:
 			# Center the image on the player position
@@ -214,8 +249,12 @@ class Player:
 		# Draw smoke emote if active
 		if self._emote_active and self._smoke_frames:
 			smoke_frame = self._smoke_frames[self._smoke_frame_index]
-			# Position smoke near the character's mouth (offset to the right and slightly up)
-			smoke_x = int(self.x) + 30
+			# Position smoke near the character's mouth, mirrored based on facing direction
+			if self._facing_right:
+				smoke_x = int(self.x) + 30
+			else:
+				smoke_x = int(self.x) - 30
+				smoke_frame = pygame.transform.flip(smoke_frame, True, False)
 			smoke_y = int(self.y) - 5
 			smoke_rect = smoke_frame.get_rect(center=(smoke_x, smoke_y))
 			surface.blit(smoke_frame, smoke_rect)
