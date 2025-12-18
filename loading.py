@@ -1,18 +1,22 @@
 import pygame
 import os
+from typing import Optional, Dict, Tuple
 
 WHITE = (255, 255, 255)
 
-_LOADING_BG_ORIGINAL: pygame.Surface | None = None
-_LOADING_BG_SCALED: dict[tuple[int, int], pygame.Surface] = {}
+_LOADING_BG_ORIGINAL: Optional[pygame.Surface] = None
+_LOADING_BG_SCALED: Dict[Tuple[int, int], pygame.Surface] = {}
 
 
-def _get_loading_bg() -> pygame.Surface | None:
+def _get_loading_bg() -> Optional[pygame.Surface]:
     global _LOADING_BG_ORIGINAL
     if _LOADING_BG_ORIGINAL is not None:
         return _LOADING_BG_ORIGINAL
 
-    img_path = os.path.join(os.path.dirname(__file__), "assets", "img", "outside.png")
+    try:
+        img_path = os.path.join(os.path.dirname(__file__), "assets", "img", "outside.png")
+    except:
+        img_path = os.path.join("assets", "img", "outside.png")
     try:
         _LOADING_BG_ORIGINAL = pygame.image.load(img_path).convert_alpha()
     except Exception:

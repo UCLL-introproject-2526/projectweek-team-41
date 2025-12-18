@@ -1,0 +1,10 @@
+{
+  "title": "Merge Casino",
+  "fullscreen": true,
+  "ume_block": 0,
+  "archive": "main",
+  "icon": "",
+  "cdn": "https://pygame-web.github.io/archives/0.9/",
+  "package": "app",
+  "version": "0.9"
+}

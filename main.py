@@ -2,7 +2,9 @@ import sys
 import os
 import json
 import random
+import asyncio
 import pygame
+from typing import Optional, Tuple, List, Dict
 from loading import draw_game_screen
 from move import Player
 from roulette import draw_roulette_scene, spin_roulette, reset_roulette, change_bet_amount, change_bet_type, handle_roulette_click, handle_roulette_keypress
@@ -14,7 +16,13 @@ pygame.init()
 pygame.mixer.init()
 
 BASE_WIDTH, BASE_HEIGHT = 900, 600
-SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+
+# For pygbag, we use a relative path and handle file operations gracefully
+# since file system access is limited in browser environment
+try:
+    SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
+except:
+    SETTINGS_FILE = "settings.json"
 
 
 def _load_settings() -> dict:
@@ -32,12 +40,13 @@ def _load_settings() -> dict:
 
 
 def _save_settings(settings: dict) -> None:
-    """Save settings to file."""
+    """Save settings to file. May fail in browser environment."""
     try:
         with open(SETTINGS_FILE, "w") as f:
             json.dump(settings, f, indent=2)
-    except Exception as e:
-        print(f"Could not save settings: {e}")
+    except Exception:
+        # In pygbag/browser, file writing may not be supported
+        pass
 
 
 def _get_letterbox_mapping(window_size: tuple[int, int]) -> tuple[float, int, int]:
@@ -300,7 +309,7 @@ def change_wheel_bet(game_state: dict, increase: bool) -> dict:
     return game_state
 
 
-def main():
+async def main():
     # Scenes: "menu" / "loading" / "game" / "roulette" / "settings"
     scene = "menu"
     player: Player | None = None
@@ -325,10 +334,13 @@ def main():
 
     menu_bg = None
     lobby_bg = None
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    try:
+        base_dir = os.path.dirname(__file__)
+    except:
+        base_dir = "."
     
     # Music playlist system
-    music_tracks = ["bgm1.mp3", "bgm2.mp3", "bgm3.mp3", "bgm4.mp3", "bgm5.mp3", "bgm6.mp3", "bgm7.mp3"]
+    music_tracks = ["bgm1.ogg", "bgm2.ogg", "bgm3.ogg", "bgm4.ogg", "bgm5.ogg", "bgm6.ogg", "bgm7.ogg"]
     current_track = None
     
     def play_random_track():
@@ -673,11 +685,13 @@ def main():
         # Now always stretch the canvas to fill the window
         _present(canvas, window)
         pygame.display.flip()
+        
+        # Required for pygbag - yield control back to browser
+        await asyncio.sleep(0)
 
     pygame.quit()
-    sys.exit()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
 

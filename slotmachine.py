@@ -334,7 +334,10 @@ class SlotMachine:
     def load_images(self):
         """Load all symbol images"""
         import os
-        base_dir = os.path.dirname(os.path.abspath(__file__))
+        try:
+            base_dir = os.path.dirname(__file__)
+        except:
+            base_dir = "."
         self.images = {}
         symbols = ["cherry", "lemon", "orange", "plum", "bell", "bar", "seven"]
 
@@ -768,7 +771,6 @@ class SlotMachine:
             self.clock.tick(FPS)
 
         pygame.quit()
-        sys.exit()
 
 
 def _ensure_slotmachine_state(game_state: dict) -> dict:

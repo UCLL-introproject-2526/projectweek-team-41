@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pygame
 import os
 
@@ -37,7 +35,10 @@ class Player:
 
 	def _load_images(self):
 		"""Load character sprite images."""
-		base_dir = os.path.dirname(os.path.abspath(__file__))
+		try:
+			base_dir = os.path.dirname(__file__)
+		except:
+			base_dir = "."
 		
 		# Target size for the character (based on radius * 2 for width/height)
 		target_size = (self.radius * 3, self.radius * 3)
@@ -72,29 +73,12 @@ class Player:
 		self._color_walk_1 = (70, 210, 90)   # groen
 		
 		# Load smoke gif frames for emote
+		# Note: PIL/Pillow is not available in pygbag, so we only load single frame
 		try:
 			smoke_path = os.path.join(base_dir, "assets", "img", "smoke.gif")
-			smoke_img = pygame.image.load(smoke_path)
-			# For GIF, we try to load multiple frames if PIL is available
-			try:
-				from PIL import Image 
-				pil_img = Image.open(smoke_path)
-				self._smoke_frames = []
-				try:
-					while True:
-						frame = pil_img.copy().convert('RGBA')
-						frame_data = frame.tobytes()
-						pygame_frame = pygame.image.fromstring(frame_data, frame.size, 'RGBA')
-						# Scale smoke to appropriate size (about 30x30)
-						pygame_frame = pygame.transform.smoothscale(pygame_frame, (30, 30))
-						self._smoke_frames.append(pygame_frame)
-						pil_img.seek(pil_img.tell() + 1)
-				except EOFError:
-					pass
-			except ImportError:
-				# PIL not available, use single frame
-				smoke_img = pygame.transform.smoothscale(smoke_img.convert_alpha(), (30, 30))
-				self._smoke_frames = [smoke_img]
+			smoke_img = pygame.image.load(smoke_path).convert_alpha()
+			smoke_img = pygame.transform.smoothscale(smoke_img, (30, 30))
+			self._smoke_frames = [smoke_img]
 		except Exception:
 			self._smoke_frames = []
 
