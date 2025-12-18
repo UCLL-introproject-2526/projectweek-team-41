@@ -334,10 +334,11 @@ class SlotMachine:
     def load_images(self):
         """Load all symbol images"""
         import os
+        from pathlib import Path
         try:
-            base_dir = os.path.dirname(__file__)
+            base_dir = str(Path(__file__).resolve().parent)
         except:
-            base_dir = "."
+            base_dir = str(Path.cwd())
         self.images = {}
         symbols = ["cherry", "lemon", "orange", "plum", "bell", "bar", "seven"]
 

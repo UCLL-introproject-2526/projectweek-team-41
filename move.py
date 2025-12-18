@@ -1,5 +1,6 @@
 import pygame
 import os
+from pathlib import Path
 
 
 class Player:
@@ -43,9 +44,9 @@ class Player:
 	def _load_images(self):
 		"""Load character sprite images."""
 		try:
-			base_dir = os.path.dirname(__file__)
+			base_dir = str(Path(__file__).resolve().parent)
 		except:
-			base_dir = "."
+			base_dir = str(Path.cwd())
 		
 		# Target size for the character (based on radius * 2 for width/height)
 		target_size = (self.radius * 3, self.radius * 3)

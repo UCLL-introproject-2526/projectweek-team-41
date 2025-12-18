@@ -1,5 +1,6 @@
 import sys
 import os
+from pathlib import Path
 import json
 import random
 import asyncio
@@ -365,22 +366,33 @@ async def main():
     lobby_bg = None
     lobby2_bg = None
     try:
-        base_dir = os.path.dirname(__file__)
+        base_dir = str(Path(__file__).resolve().parent)
     except:
-        base_dir = "."
+        base_dir = str(Path.cwd())
     
     # Music playlist system
     music_tracks = ["bgm1.ogg", "bgm2.ogg", "bgm3.ogg", "bgm4.ogg", "bgm5.ogg", "bgm6.ogg", "bgm7.ogg"]
     current_track = None
+    music_mode = "bgm"  # "bgm" (random playlist) or "disco" (dancefloor)
     
     def play_random_track():
         nonlocal current_track
+        # Only allow the playlist to change music while in bgm mode.
+        # This prevents queued MUSIC_END_EVENTs from overriding dancefloor music.
+        if music_mode != "bgm":
+            return
         # Pick a random track, but not the same as the previous one
         available_tracks = [t for t in music_tracks if t != current_track]
         next_track = random.choice(available_tracks)
         current_track = next_track
         try:
             music_path = os.path.join(base_dir, "assets", "music", next_track)
+            # Clear any queued music-end events so a previous track can't immediately
+            # trigger another random pick after we switch.
+            try:
+                pygame.event.clear(MUSIC_END_EVENT)
+            except Exception:
+                pass
             pygame.mixer.music.load(music_path)
             pygame.mixer.music.set_volume(music_volume / 100.0)
             pygame.mixer.music.play()  # Play once, then we'll pick another
@@ -390,6 +402,56 @@ async def main():
     # Set up music end event
     MUSIC_END_EVENT = pygame.USEREVENT + 1
     pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
+
+    def _enter_dancefloor_music() -> None:
+        nonlocal music_mode, disco_music_playing
+        if music_mode == "disco":
+            return
+        if not disco_music_path:
+            return
+        music_mode = "disco"
+        disco_music_playing = True
+        try:
+            # Prevent any queued end events (from bgm) from restarting playlist music.
+            try:
+                pygame.event.clear(MUSIC_END_EVENT)
+            except Exception:
+                pass
+            # Disable music end events while looping disco.
+            try:
+                pygame.mixer.music.set_endevent()
+            except TypeError:
+                pygame.mixer.music.set_endevent(0)
+
+            pygame.mixer.music.stop()
+            pygame.mixer.music.load(disco_music_path)
+            pygame.mixer.music.set_volume(music_volume / 100.0)
+            pygame.mixer.music.play(-1)  # Loop forever
+        except Exception as e:
+            print(f"Could not play disco music: {e}")
+            # Fall back to bgm mode if disco couldn't start.
+            disco_music_playing = False
+            music_mode = "bgm"
+            pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
+            play_random_track()
+
+    def _leave_dancefloor_music() -> None:
+        nonlocal music_mode, disco_music_playing
+        if music_mode != "disco":
+            return
+        music_mode = "bgm"
+        disco_music_playing = False
+        try:
+            pygame.mixer.music.stop()
+        except Exception:
+            pass
+        # Re-enable end events for the playlist, then resume with a random track.
+        pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
+        try:
+            pygame.event.clear(MUSIC_END_EVENT)
+        except Exception:
+            pass
+        play_random_track()
     
     # Start playing first random track
     play_random_track()
@@ -453,8 +515,12 @@ async def main():
     # Load disco music
     disco_music_path = None
     try:
-        disco_music_path = os.path.join(base_dir, "assets", "music", "TECHNOBUNKER.mp3")
-    except Exception:
+        disco_music_path = str(Path(base_dir) / "assets" / "music" / "TECHNOBUNKER.mp3")
+        if not Path(disco_music_path).exists():
+            print(f"Disco music file not found: {disco_music_path}")
+            disco_music_path = None
+    except Exception as e:
+        print(f"Error setting disco music path: {e}")
         disco_music_path = None
     
     # Transition zones between lobbies
@@ -530,7 +596,8 @@ async def main():
             
             # Play next random track when current one ends
             if event.type == MUSIC_END_EVENT:
-                play_random_track()
+                if music_mode == "bgm":
+                    play_random_track()
 
             if event.type == pygame.KEYDOWN and (
                 event.key == pygame.K_F11
@@ -566,6 +633,8 @@ async def main():
                     player = Player((BASE_WIDTH - 80, BASE_HEIGHT - 80))
                     higherlower_state = {}
                 elif scene == "lobby2":
+                    # Ensure disco stops if we leave lobby2 while it is playing.
+                    _leave_dancefloor_music()
                     scene = "game"
                     player = Player((BASE_WIDTH - 80, BASE_HEIGHT // 2))
                 elif scene in ("game", "loading"):
@@ -788,24 +857,12 @@ async def main():
                 # Just entered dancefloor - start disco!
                 disco_ball_lowering = True
                 disco_ball_y = -100
-                if disco_music_path and not disco_music_playing:
-                    try:
-                        pygame.mixer.music.stop()
-                        pygame.mixer.music.load(disco_music_path)
-                        pygame.mixer.music.set_volume(music_volume / 100.0)
-                        pygame.mixer.music.play(-1)  # Loop forever
-                        disco_music_playing = True
-                    except Exception as e:
-                        print(f"Could not play disco music: {e}")
+                _enter_dancefloor_music()
             elif not on_dancefloor and was_on_dancefloor:
                 # Just left dancefloor - stop disco
                 disco_ball_lowering = False
                 disco_ball_y = -100
-                if disco_music_playing:
-                    pygame.mixer.music.stop()
-                    disco_music_playing = False
-                    # Resume normal background music
-                    play_random_track()
+                _leave_dancefloor_music()
             
             was_on_dancefloor = on_dancefloor
             
@@ -870,6 +927,7 @@ async def main():
             # Check if player goes to left edge -> back to lobby1
             if player.x < ZONE_WIDTH:
                 player.set_dancing(False)  # Stop dancing when leaving
+                _leave_dancefloor_music()
                 scene = "game"
                 player = Player((BASE_WIDTH - 80, BASE_HEIGHT // 2))
 
@@ -965,13 +1023,18 @@ async def main():
                 e_rect = e_surf.get_rect(center=popup.center)
                 canvas.blit(e_surf, e_rect)
 
+        # Present surface (may be post-processed)
+        present_canvas = canvas
+
         # Apply drunk effect if active (greenish tint + wave distortion)
+        # Important: do NOT overwrite `canvas` across frames, otherwise the tint accumulates
+        # and becomes opaque (this is especially noticeable on macOS).
         if drunk_active:
-            drunk_canvas = pygame.Surface((BASE_WIDTH, BASE_HEIGHT))
+            drunk_canvas = pygame.Surface((BASE_WIDTH, BASE_HEIGHT)).convert()
             wave_amplitude = 8  # How far pixels shift
             wave_frequency = 0.03  # How tight the waves are
             time_factor = drunk_timer * 5  # Speed of wave animation
-            
+
             # Use efficient row-by-row blitting instead of pixel-by-pixel
             for y in range(BASE_HEIGHT):
                 offset = int(wave_amplitude * math.sin(wave_frequency * y + time_factor))
@@ -982,17 +1045,16 @@ async def main():
                     drunk_canvas.blit(canvas, (0, y), (BASE_WIDTH - offset, y, offset, 1))
                 elif offset < 0:
                     drunk_canvas.blit(canvas, (BASE_WIDTH + offset, y), (0, y, -offset, 1))
-            
-            # Apply green tint overlay
-            green_overlay = pygame.Surface((BASE_WIDTH, BASE_HEIGHT))
-            green_overlay.fill((0, 100, 0))
-            green_overlay.set_alpha(70)
-            drunk_canvas.blit(green_overlay, (0, 0))
-            
-            canvas = drunk_canvas
 
-        # Now always stretch the canvas to fill the window
-        _present(canvas, window)
+            # Apply green tint overlay using per-pixel alpha (more consistent across platforms)
+            green_overlay = pygame.Surface((BASE_WIDTH, BASE_HEIGHT), pygame.SRCALPHA)
+            green_overlay.fill((0, 100, 0, 70))
+            drunk_canvas.blit(green_overlay, (0, 0))
+
+            present_canvas = drunk_canvas
+
+        # Now always stretch the (possibly post-processed) canvas to fill the window
+        _present(present_canvas, window)
         pygame.display.flip()
         
         # Required for pygbag - yield control back to browser
