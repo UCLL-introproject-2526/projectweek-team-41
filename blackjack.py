@@ -475,6 +475,8 @@ class BlackjackGame:
         self.stand_button = pygame.Rect(0, 0, 100, 45)
         self.double_button = pygame.Rect(0, 0, 120, 45)
         self.deal_button = pygame.Rect(0, 0, 120, 50)
+        self.bet_minus_button = pygame.Rect(0, 0, 40, 35)
+        self.bet_plus_button = pygame.Rect(0, 0, 40, 35)
     
     def calculate_hand_value(self, hand):
         """Calculate the value of a hand, adjusting for aces"""
@@ -862,11 +864,29 @@ class BlackjackGame:
         pygame.draw.rect(screen, (0, 0, 0, 150), token_rect.inflate(20, 10), border_radius=8)
         screen.blit(token_surf, token_rect)
         
-        # Bet display
-        bet_text = f"Bet: {self.bet_amount}"
+        # Bet display with +/- buttons
+        bet_label = self.font_small.render("Bet:", True, WHITE)
+        screen.blit(bet_label, (70, 103))
+        
+        bet_text = f"{self.bet_amount}"
         bet_surf = self.font_medium.render(bet_text, True, WHITE)
-        bet_rect = bet_surf.get_rect(topleft=(70, 100))
-        screen.blit(bet_surf, bet_rect)
+        screen.blit(bet_surf, (110, 100))
+        
+        # Minus button
+        self.bet_minus_button.topleft = (165, 97)
+        minus_color = (80, 80, 120)
+        pygame.draw.rect(screen, minus_color, self.bet_minus_button, border_radius=6)
+        pygame.draw.rect(screen, WHITE, self.bet_minus_button, 2, border_radius=6)
+        minus_text = self.font_medium.render("-", True, WHITE)
+        screen.blit(minus_text, minus_text.get_rect(center=self.bet_minus_button.center))
+        
+        # Plus button
+        self.bet_plus_button.topleft = (210, 97)
+        plus_color = (80, 80, 120)
+        pygame.draw.rect(screen, plus_color, self.bet_plus_button, border_radius=6)
+        pygame.draw.rect(screen, WHITE, self.bet_plus_button, 2, border_radius=6)
+        plus_text = self.font_medium.render("+", True, WHITE)
+        screen.blit(plus_text, plus_text.get_rect(center=self.bet_plus_button.center))
         
         # Last win display
         if self.last_win > 0:
@@ -890,7 +910,7 @@ class BlackjackGame:
             self.draw_button(screen, self.deal_button, "DEAL", mouse_pos, NEON_GREEN)
             
             # Bet adjustment hint below button
-            hint_text = "UP/DOWN to change bet"
+            hint_text = "Use +/- buttons or UP/DOWN to change bet"
             hint_surf = self.font_small.render(hint_text, True, (200, 200, 200))
             hint_rect = hint_surf.get_rect(center=(self.width // 2, self.height - 18))
             screen.blit(hint_surf, hint_rect)
@@ -930,7 +950,7 @@ class BlackjackGame:
         # Controls hint (positioned in bottom-right corner)
         controls = []
         if self.state in [STATE_BETTING, STATE_GAME_OVER]:
-            controls = ["SPACE - Deal", "UP/DOWN - Bet", "ESC - Back"]
+            controls = ["SPACE - Deal", "+/- or UP/DOWN - Bet", "ESC - Back"]
         elif self.state == STATE_PLAYING:
             controls = ["H - Hit", "S - Stand", "D - Double", "ESC - Back"]
         else:
@@ -994,6 +1014,10 @@ class BlackjackGame:
         if self.state in [STATE_BETTING, STATE_GAME_OVER]:
             if self.deal_button.collidepoint(pos):
                 self.start_new_game()
+            elif self.bet_minus_button.collidepoint(pos):
+                self.change_bet(False)
+            elif self.bet_plus_button.collidepoint(pos):
+                self.change_bet(True)
         elif self.state == STATE_PLAYING:
             all_dealt = all(not card.is_dealing for card in self.player_hand + self.dealer_hand)
             if all_dealt and len(self.deal_queue) == 0:
