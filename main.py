@@ -105,7 +105,7 @@ BTN_IDLE = (70, 80, 110)
 BTN_HOVER = (95, 110, 150)
 BTN_TEXT = (255, 255, 255)
 
-LOADING_DURATION_SECONDS = 3.0
+LOADING_DURATION_SECONDS = 2
 
 # Table colors for each game
 TABLE_COLOR_SLOTS = (139, 69, 19)      # Brown for slot machines
@@ -836,7 +836,8 @@ async def main():
 
         elif scene == "loading":
             loading_elapsed += dt
-            draw_game_screen(canvas, title_font=FONT, hint_font=FONT_GAME_HINT)
+            progress = min(loading_elapsed / LOADING_DURATION_SECONDS, 1.0)
+            draw_game_screen(canvas, title_font=FONT, hint_font=FONT_GAME_HINT, progress=progress, elapsed_time=loading_elapsed)
             if loading_elapsed >= LOADING_DURATION_SECONDS:
                 scene = "game"
                 player = Player((BASE_WIDTH // 2, BASE_HEIGHT // 2))
