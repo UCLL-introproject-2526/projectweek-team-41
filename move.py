@@ -106,7 +106,7 @@ class Player:
 
 	def trigger_emote(self) -> None:
 		"""Trigger the smoke emote for 3 seconds."""
-		if not self._emote_active and self._smoke_frames:
+		if not self._emote_active and self._smoke_gif:
 			self._emote_active = True
 			self._emote_timer = 0.0
 			self._smoke_gif.reset()
