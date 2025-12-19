@@ -660,8 +660,6 @@ async def main():
                     scene = "menu"
                     player = None
                     loading_elapsed = 0.0
-                else:
-                    running = False
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_e:
                 if scene == "game":
@@ -803,7 +801,7 @@ async def main():
             start_btn.draw(canvas, mouse_pos)
             settings_btn.draw(canvas, mouse_pos)
             leave_btn.draw(canvas, mouse_pos)
-            draw_center_text(canvas, "Tip: ESC = exit (menu) / back (game)", 580, font=FONT_TIP, color=(200, 200, 200))
+            draw_center_text(canvas, "Tip: ESC = go back (in games)", 580, font=FONT_TIP, color=(200, 200, 200))
 
         elif scene == "settings":
             if menu_bg is not None:
