@@ -9,6 +9,7 @@ import pygame
 from typing import Optional, Tuple, List, Dict
 from loading import draw_game_screen
 from move import Player
+from gifimage import GIFImage
 from roulette import draw_roulette_scene, spin_roulette, reset_roulette, change_bet_amount, change_bet_type, handle_roulette_click, handle_roulette_keypress
 from slotmachine import draw_slotmachine_scene, spin_slotmachine, change_slot_bet_amount
 from luckywheel import LuckyWheel, draw_spin_button, draw_winner_announcement
@@ -422,7 +423,7 @@ async def main():
         nonlocal music_mode, disco_music_playing
         if music_mode == "disco":
             return
-        if not disco_music_path:
+        if not disco_music_tracks:
             return
         music_mode = "disco"
         disco_music_playing = True
@@ -439,7 +440,9 @@ async def main():
                 pygame.mixer.music.set_endevent(0)
 
             pygame.mixer.music.stop()
-            pygame.mixer.music.load(disco_music_path)
+            # Randomly pick a disco track
+            disco_track = random.choice(disco_music_tracks)
+            pygame.mixer.music.load(disco_track)
             pygame.mixer.music.set_volume(music_volume / 100.0)
             pygame.mixer.music.play(-1)  # Loop forever
         except Exception as e:
@@ -517,26 +520,30 @@ async def main():
     except Exception:
         cocktail_img = None
     
-    # Load disco ball image
-    disco_ball_img = None
+    # Load disco ball animated GIF
+    disco_ball_gif = None
     try:
         disco_ball_path = os.path.join(base_dir, "assets", "img", "discoball.gif")
-        disco_ball_img = pygame.image.load(disco_ball_path).convert_alpha()
-        disco_ball_img = pygame.transform.smoothscale(disco_ball_img, (100, 100))
+        disco_ball_gif = GIFImage(disco_ball_path, size=(100, 100))
     except Exception as e:
         print(f"Could not load disco ball: {e}")
-        disco_ball_img = None
+        disco_ball_gif = None
     
-    # Load disco music
-    disco_music_path = None
+    # Load disco music tracks (randomly pick one when entering dancefloor)
+    disco_music_tracks = []
     try:
-        disco_music_path = str(Path(base_dir) / "assets" / "music" / "TECHNOBUNKER.mp3")
-        if not Path(disco_music_path).exists():
-            print(f"Disco music file not found: {disco_music_path}")
-            disco_music_path = None
+        track1 = str(Path(base_dir) / "assets" / "music" / "TECHNOBUNKER.mp3")
+        track2 = str(Path(base_dir) / "assets" / "music" / "TECHNOBUNKER2.mp3")
+        if Path(track1).exists():
+            disco_music_tracks.append(track1)
+        else:
+            print(f"Disco music file not found: {track1}")
+        if Path(track2).exists():
+            disco_music_tracks.append(track2)
+        else:
+            print(f"Disco music file not found: {track2}")
     except Exception as e:
-        print(f"Error setting disco music path: {e}")
-        disco_music_path = None
+        print(f"Error setting disco music paths: {e}")
     
     # Transition zones between lobbies
     ZONE_WIDTH = 60
@@ -940,10 +947,11 @@ async def main():
                     canvas.blit(ray_surf, (0, 0))
                 
                 # Draw disco ball
-                if disco_ball_img is not None:
+                if disco_ball_gif is not None:
+                    disco_ball_gif.update(dt)
                     ball_x = ball_center_x - 50
                     ball_y = int(disco_ball_y)
-                    canvas.blit(disco_ball_img, (ball_x, ball_y))
+                    disco_ball_gif.draw(canvas, (ball_x, ball_y))
                     
                     # Draw string from top to disco ball
                     pygame.draw.line(canvas, (100, 100, 100), (ball_center_x, 0), (ball_center_x, ball_y), 2)

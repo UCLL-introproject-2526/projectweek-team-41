@@ -1,6 +1,7 @@
 import pygame
 import os
 from pathlib import Path
+from gifimage import GIFImage
 
 
 class Player:
@@ -27,10 +28,6 @@ class Player:
 		self._emote_active = False
 		self._emote_timer = 0.0
 		self._emote_duration = 3.0  # seconds
-		self._smoke_frames = []
-		self._smoke_frame_index = 0
-		self._smoke_frame_timer = 0.0
-		self._smoke_frame_delay = 0.1  # seconds per frame
 		
 		# Dancing state (mirror flip)
 		self._is_dancing = False
@@ -80,23 +77,19 @@ class Player:
 		self._color_walk_0 = (230, 60, 60)   # rood
 		self._color_walk_1 = (70, 210, 90)   # groen
 		
-		# Load smoke gif frames for emote
-		# Note: PIL/Pillow is not available in pygbag, so we only load single frame
+		# Load smoke gif animation using GIFImage
 		try:
 			smoke_path = os.path.join(base_dir, "assets", "img", "smoke.gif")
-			smoke_img = pygame.image.load(smoke_path).convert_alpha()
-			smoke_img = pygame.transform.smoothscale(smoke_img, (30, 30))
-			self._smoke_frames = [smoke_img]
+			self._smoke_gif = GIFImage(smoke_path, size=(30, 30))
 		except Exception:
-			self._smoke_frames = []
+			self._smoke_gif = None
 
 	def trigger_emote(self) -> None:
 		"""Trigger the smoke emote for 3 seconds."""
-		if not self._emote_active and self._smoke_frames:
+		if not self._emote_active and self._smoke_gif is not None:
 			self._emote_active = True
 			self._emote_timer = 0.0
-			self._smoke_frame_index = 0
-			self._smoke_frame_timer = 0.0
+			self._smoke_gif.reset()
 
 	def set_dancing(self, dancing: bool) -> None:
 		"""Set whether the player is on the dancefloor."""
@@ -169,11 +162,9 @@ class Player:
 		# Update emote timer
 		if self._emote_active:
 			self._emote_timer += dt
-			self._smoke_frame_timer += dt
-			# Animate smoke frames
-			if self._smoke_frame_timer >= self._smoke_frame_delay and self._smoke_frames:
-				self._smoke_frame_timer -= self._smoke_frame_delay
-				self._smoke_frame_index = (self._smoke_frame_index + 1) % len(self._smoke_frames)
+			# Update smoke gif animation
+			if self._smoke_gif is not None:
+				self._smoke_gif.update(dt)
 			# Check if emote duration has passed
 			if self._emote_timer >= self._emote_duration:
 				self._emote_active = False
@@ -248,8 +239,8 @@ class Player:
 			pygame.draw.circle(surface, color, (int(self.x), int(self.y)), self.radius)
 		
 		# Draw smoke emote if active
-		if self._emote_active and self._smoke_frames:
-			smoke_frame = self._smoke_frames[self._smoke_frame_index]
+		if self._emote_active and self._smoke_gif is not None:
+			smoke_frame = self._smoke_gif.get_frame()
 			# Position smoke near the character's mouth, mirrored based on facing direction
 			if self._facing_right:
 				smoke_x = int(self.x) + 30
