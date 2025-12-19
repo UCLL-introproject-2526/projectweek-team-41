@@ -2,6 +2,14 @@
 Higher or Lower - Casino Style Card Game
 =========================================
 Guess if the next card is higher or lower than the current one.
+
+This module is embedded into the casino hub (`main.py`) using the wrapper
+functions at the bottom of the file.
+
+Pattern:
+- `game_state` (a dict) stores the HigherLowerGame instance between frames
+- `draw_higherlower_scene` is called every frame to update+draw
+- click/keypress wrapper functions forward input into the game object
 """
 
 import pygame
@@ -757,8 +765,13 @@ class HigherLowerGame:
 # FUNCTIONS CALLED FROM MAIN.PY
 # =============================================================================
 
+# These are small adapter functions so `main.py` can treat this mini-game like a
+# "scene" with a state dictionary.
+
 def draw_higherlower_scene(surface: pygame.Surface, game_state: dict, font: pygame.font.Font) -> dict:
     """Draw and update higher/lower game on the given surface."""
+    # First call: create the game object.
+    # Later calls: reuse it so the game continues.
     if "game" not in game_state:
         tokens = game_state.get("tokens", 100)
         surf_w, surf_h = surface.get_size()
@@ -770,6 +783,7 @@ def draw_higherlower_scene(surface: pygame.Surface, game_state: dict, font: pyga
             "tokens": tokens,
         }
     
+    # Actual game logic lives inside the HigherLowerGame class.
     game: HigherLowerGame = game_state["game"]
     game.update()
     game.draw(surface)
@@ -782,6 +796,7 @@ def draw_higherlower_scene(surface: pygame.Surface, game_state: dict, font: pyga
 
 def handle_higherlower_click(game_state: dict, pos: tuple) -> dict:
     """Handle mouse click in higher/lower game."""
+    # Click position is in the same coordinates as the draw surface.
     if "game" in game_state:
         game_state["game"].handle_click(pos)
     return game_state
@@ -789,6 +804,7 @@ def handle_higherlower_click(game_state: dict, pos: tuple) -> dict:
 
 def handle_higherlower_keypress(game_state: dict, key: int) -> dict:
     """Handle keypress in higher/lower game."""
+    # Uses pygame key constants.
     if "game" in game_state:
         game_state["game"].handle_keypress(key)
     return game_state

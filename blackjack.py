@@ -2,6 +2,16 @@
 Blackjack - Casino Style Card Game
 ===================================
 A fun and visually appealing blackjack game with casino effects.
+
+This module is embedded into the casino hub (`main.py`).
+
+The hub does not run Blackjack's own game loop. Instead it calls:
+- `draw_blackjack_scene(surface, game_state, font)` every frame
+- `handle_blackjack_click(game_state, pos)` when the mouse is clicked
+- `handle_blackjack_keypress(game_state, key)` on key presses
+
+`game_state` is a plain dict used to keep the BlackjackGame instance alive
+between frames.
 """
 
 import pygame
@@ -1050,8 +1060,16 @@ class BlackjackGame:
 
 # === Functions to be called from main.py ===
 
+# The following functions are *adapters*.
+# They make this module look like the other scenes in the project:
+# - state lives in a dict
+# - drawing happens through a single draw_* function
+# - input is handled by small wrapper functions
+
 def draw_blackjack_scene(surface: pygame.Surface, game_state: dict, font: pygame.font.Font) -> dict:
     """Draw and update blackjack game on the given surface."""
+    # First call: create the game object and store it in the dict.
+    # Next calls: reuse the same object so animations/timers continue.
     if "game" not in game_state:
         tokens = game_state.get("tokens", 100)
         surf_w, surf_h = surface.get_size()
@@ -1063,6 +1081,7 @@ def draw_blackjack_scene(surface: pygame.Surface, game_state: dict, font: pygame
             "tokens": tokens,
         }
     
+    # The actual blackjack rules/live logic are inside the BlackjackGame class.
     game: BlackjackGame = game_state["game"]
     game.update()
     game.draw(surface)
@@ -1075,6 +1094,8 @@ def draw_blackjack_scene(surface: pygame.Surface, game_state: dict, font: pygame
 
 def handle_blackjack_click(game_state: dict, pos: tuple) -> dict:
     """Handle mouse click in blackjack game."""
+    # This receives the click position in the *same coordinate system* as the
+    # surface passed to draw_blackjack_scene.
     if "game" in game_state:
         game_state["game"].handle_click(pos)
     return game_state
@@ -1082,6 +1103,7 @@ def handle_blackjack_click(game_state: dict, pos: tuple) -> dict:
 
 def handle_blackjack_keypress(game_state: dict, key: int) -> dict:
     """Handle keypress in blackjack game."""
+    # Keys are pygame key constants (e.g. pygame.K_SPACE, pygame.K_h, ...).
     if "game" in game_state:
         game_state["game"].handle_keypress(key)
     return game_state

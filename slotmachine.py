@@ -1,3 +1,18 @@
+"""slotmachine.py
+
+This module contains the Slot Machine mini-game.
+
+Important structure note:
+- The SlotMachine was originally built as a standalone game at 800x600.
+- `main.py` embeds it into the casino hub via wrapper functions at the bottom:
+    `draw_slotmachine_scene`, `spin_slotmachine`, and `change_slot_bet_amount`.
+
+Game-dev concepts used here:
+- A game loop updates logic, then draws a frame.
+- To embed a game with a different "native" resolution, we draw to an internal
+    Surface of fixed size and then scale/blit it to the main canvas.
+"""
+
 import pygame
 import random
 import sys
@@ -16,6 +31,7 @@ REEL_WIDTH = 150
 REEL_HEIGHT = 150
 SYMBOL_SIZE = 120
 NUM_REELS = 3
+FIXED_BET_AMOUNT = 20  # Slot machine price is always 20 and cannot change.
 SPIN_DURATION = 2000  # milliseconds
 SPIN_SPEED_INCREMENT = 300  # Each reel stops 300ms after the previous
 BOUNCE_DURATION = 200  # Bounce effect duration in ms
@@ -297,7 +313,7 @@ class SlotMachine:
 
         # TOKENS (was credits/$)
         self.tokens = starting_tokens
-        self.bet_amount = 10
+        self.bet_amount = FIXED_BET_AMOUNT
         self.last_win = 0
 
         # Cooldown system
@@ -330,6 +346,20 @@ class SlotMachine:
         self.golden_sparkles = [GoldenSparkle() for _ in range(100)]
         self.vignette_pulse = 0
         self.neon_border_offset = 0
+
+        # Lever/handle animation (cosmetic)
+        # This is the classic slot-machine handle pull when a spin starts.
+        # It's intentionally independent from the reel logic: it does not affect
+        # outcomes; it just makes the start of a spin feel more physical.
+        #
+        # User-requested behavior: just goes DOWN and back UP (no hold, no spring).
+        self._handle_animating = False
+        self._handle_anim_start_ms = 0
+        self._handle_anim_duration_ms = 260
+        self._handle_pull_progress = 0.0  # 0.0 (up) -> 1.0 (pulled down)
+
+        # Rect used for click detection (updated each draw)
+        self._handle_rect = pygame.Rect(0, 0, 0, 0)
 
     def load_images(self):
         """Load all symbol images"""
@@ -392,6 +422,35 @@ class SlotMachine:
 
         return True
 
+    def _start_handle_animation(self) -> None:
+        # Start (or restart) the handle pull animation.
+        now_ms = pygame.time.get_ticks()
+        self._handle_animating = True
+        self._handle_anim_start_ms = now_ms
+        self._handle_pull_progress = 0.0
+
+    def _update_handle_animation(self) -> None:
+        # Update lever pull animation based on wall-clock time.
+        # We use milliseconds here because the slot machine already uses
+        # `pygame.time.get_ticks()` for spin timing.
+        now_ms = pygame.time.get_ticks()
+
+        if not self._handle_animating:
+            self._handle_pull_progress = 0.0
+            return
+
+        duration = max(1, int(self._handle_anim_duration_ms))
+        t = (now_ms - self._handle_anim_start_ms) / duration
+        if t >= 1.0:
+            self._handle_animating = False
+            self._handle_pull_progress = 0.0
+            return
+
+        # Smooth down-and-up motion:
+        # sin(pi*t) goes 0 -> 1 -> 0 with smooth start/end (no sudden jerks).
+        t = 0.0 if t < 0.0 else 1.0 if t > 1.0 else t
+        self._handle_pull_progress = float(math.sin(math.pi * t))
+
     def get_cooldown_remaining(self):
         if not self.cooldown_active:
             return 0
@@ -403,6 +462,9 @@ class SlotMachine:
     def spin(self):
         if not self.can_spin():
             return
+
+        # Cosmetic lever pull at the start of a successful spin.
+        self._start_handle_animation()
 
         self.tokens -= self.bet_amount
         self.spinning = True
@@ -416,7 +478,7 @@ class SlotMachine:
             self.spin_start_time + SPIN_DURATION + SPIN_SPEED_INCREMENT * 2,
         ]
 
-        self.spin_speeds = [15, 15, 15]
+        self.spin_speeds = [25, 25, 25]
         self.spin_offsets = [0, 0, 0]
         self.reel_stopped = [False, False, False]
         self.is_bouncing = [False, False, False]
@@ -509,6 +571,11 @@ class SlotMachine:
             self.create_confetti_burst(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100, amount=20)
 
     def update_effects(self):
+        # Even though this method is named "effects", we also update small
+        # cosmetic animations here (like the handle pull), because it is called
+        # once per frame in both standalone mode and embedded mode.
+        self._update_handle_animation()
+
         self.confetti_particles = [p for p in self.confetti_particles if p.update()]
         self.star_bursts = [s for s in self.star_bursts if s.update()]
 
@@ -608,6 +675,59 @@ class SlotMachine:
             glow_intensity = int(128 + 127 * math.sin(pygame.time.get_ticks() * 0.005))
             glow_color = (0, glow_intensity, 0)
             pygame.draw.rect(self.screen, glow_color, highlight_rect, 4)
+
+    def draw_handle(self) -> pygame.Rect:
+        """Draw the slot-machine lever/handle with a pull animation.
+
+        This is purely visual: it does not affect game logic.
+        """
+        # Place the handle near the right side of the machine.
+        # (Coordinates are in the slot machine's native 800x600 layout.)
+        base_x = SCREEN_WIDTH - 55
+        top_y = 150
+        bottom_y = 430
+
+        # How far the knob moves when pulled.
+        pull_distance = 105
+        pull = float(self._handle_pull_progress)
+
+        # Slight "bend" to the right as you pull.
+        bend = int(12 * pull)
+
+        # Rod points
+        rod_top = (base_x, top_y)
+        rod_bottom = (base_x + bend, bottom_y)
+
+        # Back plate / mount
+        mount_rect = pygame.Rect(base_x - 22, bottom_y - 20, 44, 55)
+        pygame.draw.rect(self.screen, DARK_GRAY, mount_rect, border_radius=10)
+        pygame.draw.rect(self.screen, GOLD, mount_rect, 3, border_radius=10)
+
+        # Rod shadow (for depth)
+        pygame.draw.line(self.screen, BLACK, (rod_top[0] + 3, rod_top[1] + 3), (rod_bottom[0] + 3, rod_bottom[1] + 3), 10)
+
+        # Rod (metal)
+        pygame.draw.line(self.screen, LIGHT_GRAY, rod_top, rod_bottom, 10)
+        pygame.draw.line(self.screen, WHITE, (rod_top[0] - 1, rod_top[1] - 1), (rod_bottom[0] - 1, rod_bottom[1] - 1), 3)
+
+        # Knob position (moves down during pull)
+        knob_y = top_y + int(pull_distance * pull)
+        knob_x = base_x - 2 + bend // 2
+
+        # Knob shadow
+        pygame.draw.circle(self.screen, BLACK, (knob_x + 3, knob_y + 3), 18)
+
+        # Knob (gold)
+        pygame.draw.circle(self.screen, GOLD, (knob_x, knob_y), 18)
+        pygame.draw.circle(self.screen, BRIGHT_GOLD, (knob_x - 4, knob_y - 4), 6)
+        pygame.draw.circle(self.screen, (120, 80, 20), (knob_x, knob_y), 18, 3)
+
+        # Build a generous clickable rect around the handle.
+        # (Knob + rod + mount.)
+        handle_rect = pygame.Rect(0, 0, 90, (bottom_y - top_y) + 80)
+        handle_rect.center = (base_x - 5, (top_y + bottom_y) // 2)
+        self._handle_rect = handle_rect
+        return handle_rect
 
     def draw_fancy_title(self):
         self.title_pulse = (self.title_pulse + 0.1) % (2 * math.pi)
@@ -732,10 +852,17 @@ class SlotMachine:
             x_pos = reel_spacing + i * (REEL_WIDTH + reel_spacing)
             self.draw_reel(i, x_pos)
 
+        # Draw the lever/handle after reels so it appears part of the machine.
+        handle_rect = self.draw_handle()
+
         for confetti in self.confetti_particles:
             confetti.draw(self.screen)
 
         button_rect = self.draw_ui()
+
+        # Store rects for input hit-testing.
+        # Standalone mode uses `handle_events(...)`, embedded mode reads these via wrappers.
+        self._handle_rect = handle_rect
 
         if flip and self._owns_display:
             pygame.display.flip()
@@ -743,22 +870,22 @@ class SlotMachine:
         return button_rect
 
     # Standalone mode remains available
-    def handle_events(self, button_rect):
+    def handle_events(self, button_rect, handle_rect: pygame.Rect | None = None):
+        # In standalone mode, we treat both the SPIN button and the lever as valid
+        # ways to trigger a spin.
+        if handle_rect is None:
+            handle_rect = self._handle_rect
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
 
             if event.type == pygame.MOUSEBUTTONDOWN:
-                if button_rect.collidepoint(event.pos):
+                if button_rect.collidepoint(event.pos) or (handle_rect is not None and handle_rect.collidepoint(event.pos)):
                     self.spin()
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     self.spin()
-                elif event.key == pygame.K_UP and not self.spinning and not self.cooldown_active:
-                    self.bet_amount = min(self.bet_amount + 10, 1000)
-                elif event.key == pygame.K_DOWN and not self.spinning and not self.cooldown_active:
-                    self.bet_amount = max(self.bet_amount - 10, 10)
 
         return True
 
@@ -768,22 +895,28 @@ class SlotMachine:
             self.update_spin()
             self.update_effects()
             button_rect = self.draw()
-            running = self.handle_events(button_rect)
+            running = self.handle_events(button_rect, self._handle_rect)
             self.clock.tick(FPS)
 
         pygame.quit()
 
 
 def _ensure_slotmachine_state(game_state: dict) -> dict:
+    # This helper turns an empty dict into a fully-initialized slot-machine state.
+    # It stores two important private fields:
+    # - `_surface`: internal 800x600 render target
+    # - `_machine`: the SlotMachine instance that owns the actual logic
     if "initialized" in game_state:
         return game_state
 
     tokens = game_state.get("tokens", 100)
-    bet_amount = game_state.get("bet_amount", 10)
+    bet_amount = FIXED_BET_AMOUNT
 
+    # Internal fixed-resolution surface.
+    # We draw the whole slot machine UI here, then scale it into `main.py`'s canvas.
     internal_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
     machine = SlotMachine(screen=internal_surface, starting_tokens=tokens)
-    machine.bet_amount = bet_amount
+    machine.bet_amount = FIXED_BET_AMOUNT
 
     game_state["initialized"] = True
     game_state["_surface"] = internal_surface
@@ -791,6 +924,7 @@ def _ensure_slotmachine_state(game_state: dict) -> dict:
     game_state["tokens"] = tokens
     game_state["bet_amount"] = bet_amount
     game_state["button_rect"] = pygame.Rect(0, 0, 0, 0)
+    game_state["handle_rect"] = pygame.Rect(0, 0, 0, 0)
     return game_state
 
 
@@ -803,16 +937,22 @@ def draw_slotmachine_scene(surface: pygame.Surface, game_state: dict, font: pyga
     machine: SlotMachine = game_state["_machine"]
     internal_surface: pygame.Surface = game_state["_surface"]
 
-    # Sync tokens & bet into machine (so passive income in main stays synced)
+    # Sync tokens & bet into machine (so passive income in main stays synced).
+    # The hub (`main.py`) is the source-of-truth for tokens, but each mini-game
+    # also keeps its own copy. We keep them aligned here.
     machine.tokens = game_state.get("tokens", machine.tokens)
-    machine.bet_amount = game_state.get("bet_amount", machine.bet_amount)
+    machine.bet_amount = FIXED_BET_AMOUNT
 
-    # Update and draw into internal surface
+    # Update and draw into internal surface.
+    # Note how `draw(flip=False)` draws onto the internal surface instead of
+    # flipping the display; flipping is done once globally in `main.py`.
     machine.update_spin()
     machine.update_effects()
     button_rect_internal = machine.draw(flip=False)
+    handle_rect_internal = getattr(machine, "_handle_rect", pygame.Rect(0, 0, 0, 0))
 
-    # Fit internal (800x600) into whatever surface size we got (main canvas)
+    # Fit internal (800x600) into whatever surface size we got (main canvas).
+    # We compute a uniform scale so the internal image isn't stretched.
     dst_w, dst_h = surface.get_size()
     scale = min(dst_w / SCREEN_WIDTH, dst_h / SCREEN_HEIGHT)
     render_w = int(SCREEN_WIDTH * scale)
@@ -823,7 +963,9 @@ def draw_slotmachine_scene(surface: pygame.Surface, game_state: dict, font: pyga
     scaled = pygame.transform.smoothscale(internal_surface, (render_w, render_h))
     surface.blit(scaled, (offset_x, offset_y))
 
-    # Provide a button rect in CANVAS coordinates for click detection in main.py
+    # Provide a button rect in CANVAS coordinates for click detection in main.py.
+    # The button rect returned by SlotMachine is in internal coordinates, so we
+    # scale + offset it to match the surface we actually displayed.
     button_rect_canvas = pygame.Rect(
         offset_x + int(button_rect_internal.x * scale),
         offset_y + int(button_rect_internal.y * scale),
@@ -831,37 +973,39 @@ def draw_slotmachine_scene(surface: pygame.Surface, game_state: dict, font: pyga
         int(button_rect_internal.height * scale),
     )
 
+    handle_rect_canvas = pygame.Rect(
+        offset_x + int(handle_rect_internal.x * scale),
+        offset_y + int(handle_rect_internal.y * scale),
+        int(handle_rect_internal.width * scale),
+        int(handle_rect_internal.height * scale),
+    )
+
     game_state["button_rect"] = button_rect_canvas
+    game_state["handle_rect"] = handle_rect_canvas
     game_state["tokens"] = machine.tokens
-    game_state["bet_amount"] = machine.bet_amount
+    game_state["bet_amount"] = FIXED_BET_AMOUNT
     return game_state
 
 
 def spin_slotmachine(game_state: dict) -> dict:
+    # Wrapper called by `main.py` when player presses SPACE or clicks the button.
     game_state = _ensure_slotmachine_state(game_state)
     machine: SlotMachine = game_state["_machine"]
     machine.tokens = game_state.get("tokens", machine.tokens)
-    machine.bet_amount = game_state.get("bet_amount", machine.bet_amount)
+    machine.bet_amount = FIXED_BET_AMOUNT
     machine.spin()
     game_state["tokens"] = machine.tokens
-    game_state["bet_amount"] = machine.bet_amount
+    game_state["bet_amount"] = FIXED_BET_AMOUNT
     return game_state
 
 
 def change_slot_bet_amount(game_state: dict, increase: bool) -> dict:
+    # Wrapper called by `main.py` when player presses up/down.
+    # The slot machine bet/price is fixed and cannot be changed.
     game_state = _ensure_slotmachine_state(game_state)
     machine: SlotMachine = game_state["_machine"]
-
-    if machine.spinning or machine.cooldown_active:
-        return game_state
-
-    step = 10
-    if increase:
-        machine.bet_amount = min(machine.bet_amount + step, 1000)
-    else:
-        machine.bet_amount = max(machine.bet_amount - step, 10)
-
-    game_state["bet_amount"] = machine.bet_amount
+    machine.bet_amount = FIXED_BET_AMOUNT
+    game_state["bet_amount"] = FIXED_BET_AMOUNT
     return game_state
 
 

@@ -3,6 +3,24 @@ European Roulette Wheel - Deterministic Implementation
 ======================================================
 The result is derived ONLY from the ball's final angle relative to the wheel.
 No hidden randomizer after spin starts.
+
+This file is used in two ways:
+
+1) Standalone demo/game (the `RouletteGame` class + `if __name__ == "__main__"`).
+2) Embedded inside the main hub (`main.py`) via a small "public API":
+
+    - `draw_roulette_scene(surface, game_state, font) -> game_state`
+    - `spin_roulette(game_state) -> game_state`
+    - `reset_roulette(game_state) -> game_state`
+    - `change_bet_amount(game_state, increase) -> game_state`
+    - `change_bet_type(game_state, bet_type) -> game_state`
+    - `handle_roulette_click(game_state, mouse_pos) -> game_state`
+    - `handle_roulette_keypress(game_state, event) -> game_state`
+
+If you're new to game-dev, notice the pattern:
+- The *state* is stored in a plain Python dict (`game_state`).
+- The draw function also performs the per-frame update (physics + VFX).
+- Input handlers mutate the state dict, but don't draw.
 """
 
 import pygame
@@ -635,7 +653,11 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
     Returns:
         Updated game_state dictionary
     """
-    # Initialize state if needed
+    # Initialize state if needed.
+    # This is a very common pattern for "embedded scenes":
+    # - the first time you enter the scene, `game_state` is `{}`
+    # - this function fills it with all fields the scene needs
+    # - subsequent calls reuse the state so animations continue
     if "initialized" not in game_state:
         tokens = game_state.get("tokens", 100)  # Get tokens passed from app
         surf_w, surf_h = surface.get_size()
@@ -668,7 +690,10 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
             "buttons": {},
         }
     
-    # Get surface dimensions and calculate scale
+    # Get surface dimensions and calculate scale.
+    # The roulette scene was originally designed at SCREEN_WIDTH/SCREEN_HEIGHT.
+    # When embedded in `main.py`, we draw onto a surface of whatever size we get,
+    # so we compute a uniform scale and derive all radii from it.
     surf_w, surf_h = surface.get_size()
     scale = min(surf_w / SCREEN_WIDTH, surf_h / SCREEN_HEIGHT) * 0.9
     center_x, center_y = surf_w // 2, surf_h // 2
@@ -678,7 +703,9 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
     pocket_radius = int(POCKET_RADIUS * scale)
     ball_orbit_radius = int(BALL_ORBIT_RADIUS * scale)
     
-    # Update physics
+    # UPDATE PHASE (physics)
+    # Wheel and ball angles are updated each frame.
+    # Speeds decay via friction multipliers, so things come to a stop naturally.
     game_state["wheel_angle"] = (game_state["wheel_angle"] + game_state["wheel_speed"]) % 360
     game_state["wheel_speed"] *= WHEEL_FRICTION
     
@@ -687,6 +714,7 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
             game_state["ball_angle"] = (game_state["ball_angle"] + game_state["ball_speed"]) % 360
             game_state["ball_speed"] *= BALL_FRICTION
             
+            # When the ball is slow enough, we "land" it and compute the result.
             if abs(game_state["ball_speed"]) < BALL_STOP_THRESHOLD:
                 game_state["ball_landed"] = True
                 game_state["ball_speed"] = 0
@@ -695,7 +723,8 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
                     game_state["ball_angle"], game_state["wheel_angle"]
                 )
                 
-                # Calculate winnings if bet was placed
+                # Calculate winnings *once* when the ball lands.
+                # Payout multipliers here include returning the original bet.
                 if game_state["bet_placed"]:
                     result = game_state["result_number"]
                     bet_type = game_state["bet_type"]
@@ -1019,6 +1048,10 @@ def draw_roulette_scene(surface: pygame.Surface, game_state: dict, font: pygame.
 
 def spin_roulette(game_state: dict) -> dict:
     """Start a new spin with bet."""
+    # This function is called from `main.py` when the player presses SPACE
+    # or clicks the Spin button.
+    #
+    # Important: this function mutates the dict but does not draw anything.
     # Check if player has enough tokens
     current_bet = game_state.get("current_bet", 10)
     tokens = game_state.get("tokens", 0)
@@ -1029,12 +1062,15 @@ def spin_roulette(game_state: dict) -> dict:
     if game_state.get("ball_active", False):
         return game_state  # Already spinning
     
-    # Deduct bet
+    # Deduct bet immediately when the spin starts.
+    # (So the player can't spin without paying.)
     game_state["tokens"] = tokens - current_bet
     game_state["bet_placed"] = True
     game_state["winnings"] = 0
     
-    # Start spin
+    # Start spin.
+    # Note: roulette is deterministic *after* this point: we randomize the
+    # initial speeds/angles at spin start, then physics determines the outcome.
     game_state["wheel_speed"] = random.uniform(3.0, 6.0)
     game_state["ball_speed"] = -random.uniform(8.0, 12.0)
     game_state["ball_angle"] = random.uniform(0, 360)
@@ -1047,6 +1083,8 @@ def spin_roulette(game_state: dict) -> dict:
 
 def reset_roulette(game_state: dict) -> dict:
     """Reset the roulette state (keeps tokens)."""
+    # Reset is a "soft reset": we clear the spin/result fields but keep currency
+    # and bet selections so the player doesn't have to re-select everything.
     tokens = game_state.get("tokens", 100)
     current_bet = game_state.get("current_bet", 10)
     bet_type = game_state.get("bet_type", "red")
@@ -1070,6 +1108,8 @@ def reset_roulette(game_state: dict) -> dict:
 
 def change_bet_amount(game_state: dict, increase: bool) -> dict:
     """Change the bet amount."""
+    # Bet size can only be changed when not spinning.
+    # `increase=True` means bet up; False means bet down.
     if game_state.get("ball_active", False):
         return game_state  # Can't change while spinning
     
@@ -1087,6 +1127,8 @@ def change_bet_amount(game_state: dict, increase: bool) -> dict:
 
 def change_bet_type(game_state: dict, bet_type: str) -> dict:
     """Change the bet type."""
+    # `bet_type` is a string. In this scene we treat those strings like enums.
+    # Examples: "red", "black", "odd", "even", or "number".
     if game_state.get("ball_active", False):
         return game_state  # Can't change while spinning
     
@@ -1098,6 +1140,8 @@ def change_bet_type(game_state: dict, bet_type: str) -> dict:
 
 def handle_roulette_click(game_state: dict, mouse_pos: tuple) -> dict:
     """Handle mouse clicks on roulette buttons."""
+    # `main.py` handles the global mouse event, maps it into canvas coordinates,
+    # and then calls this function only when the current scene is "roulette".
     if not game_state.get("initialized", False):
         return game_state
     
@@ -1141,6 +1185,10 @@ def handle_roulette_click(game_state: dict, mouse_pos: tuple) -> dict:
 
 def handle_roulette_keypress(game_state: dict, event) -> dict:
     """Handle keyboard input for roulette, including number input field."""
+    # When the number input is focused we behave like a mini text-box:
+    # - digits append to a string
+    # - backspace deletes
+    # - enter confirms
     if not game_state.get("initialized", False):
         return game_state
     

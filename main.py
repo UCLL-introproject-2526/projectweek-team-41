@@ -1,30 +1,64 @@
+"""main.py
+
+This file is the "glue" for the project: it creates the pygame window, runs the
+main loop, and switches between different mini-games (roulette, slots, etc.).
+
+If you're new to game-dev in Python, the key idea is that pygame programs are
+usually built around a loop that repeats ~60 times per second:
+
+1) read input/events (keyboard, mouse, quit)
+2) update game state (positions, timers, rules)
+3) draw the current state onto a Surface
+4) present the final frame to the window
+
+This project uses a simple "scene" (state machine) approach: `scene` is a string
+like "menu" or "roulette" that decides which update/draw code runs.
+"""
+
 import sys
 import os
 from pathlib import Path
 import json
 import random
+
+# Pygbag (running pygame in the browser) uses an async event loop.
+# Making `main()` async and yielding with `await asyncio.sleep(0)` keeps the
+# browser responsive and prevents "tab frozen" behavior.
 import asyncio
+
+# `math` is used for simple game geometry (sin/cos for effects and distances).
 import math
+
+# pygame is the game framework: window, input events, drawing, audio, timing.
 import pygame
+
+# Type hints help the editor understand the shapes of values (optional but nice).
 from typing import Optional, Tuple, List, Dict
 from loading import draw_game_screen
 from move import Player
 from gifimage import GIFImage
 from roulette import draw_roulette_scene, spin_roulette, reset_roulette, change_bet_amount, change_bet_type, handle_roulette_click, handle_roulette_keypress
-from slotmachine import draw_slotmachine_scene, spin_slotmachine, change_slot_bet_amount
+from slotmachine import draw_slotmachine_scene, spin_slotmachine
 from luckywheel import LuckyWheel, draw_spin_button, draw_winner_announcement
 from blackjack import draw_blackjack_scene, handle_blackjack_click, handle_blackjack_keypress, change_blackjack_bet
 from higherlower import draw_higherlower_scene, handle_higherlower_click, handle_higherlower_keypress, change_higherlower_bet
 from horsegame import draw_horsegame_scene, handle_horsegame_click, handle_horsegame_keypress, change_horsegame_bet
 
-# Initialize Pygame
+# Initialize pygame.
+# - `pygame.init()` initializes the core modules (display, time, etc.)
+# - `pygame.mixer.init()` initializes the audio mixer (music/sfx playback)
 pygame.init()
 pygame.mixer.init()
 
 BASE_WIDTH, BASE_HEIGHT = 900, 600
+# The game renders to a *fixed logical resolution* (900x600) called `canvas`.
+# Then we scale that canvas to whatever the actual window size is.
+# This is a common technique so your game logic doesn't depend on window size.
 
-# For pygbag, we use a relative path and handle file operations gracefully
-# since file system access is limited in browser environment
+# For pygbag (browser builds), file system access can be limited.
+# We therefore:
+# - compute a best-effort settings path
+# - wrap load/save in try/except so the game still runs even if saving fails
 try:
     SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "settings.json")
 except:
@@ -56,6 +90,9 @@ def _save_settings(settings: dict) -> None:
 
 
 def _get_letterbox_mapping(window_size: tuple[int, int]) -> tuple[float, int, int]:
+    # Helper for "letterboxing" (keeping aspect ratio with black bars).
+    # This project currently stretches the canvas to fill the window instead,
+    # but this function is kept around in case you want true aspect-ratio scaling.
     win_w, win_h = window_size
     scale = min(win_w / BASE_WIDTH, win_h / BASE_HEIGHT)
     render_w = int(BASE_WIDTH * scale)
@@ -66,7 +103,14 @@ def _get_letterbox_mapping(window_size: tuple[int, int]) -> tuple[float, int, in
 
 
 def _window_to_canvas_pos(window_pos: tuple[int, int], window_size: tuple[int, int]) -> tuple[int, int] | None:
-    """Transform window coordinates to canvas coordinates (simple stretch, no letterboxing)."""
+    """Transform window (real pixels) -> canvas coordinates (900x600).
+
+    Because we draw to `canvas` and then scale it to the window, mouse positions
+    from pygame (which are in *window pixels*) must be mapped back to the canvas.
+
+    Important: this uses *simple stretch mapping* (no letterboxing).
+    If you later switch to letterboxing, this mapping must change too.
+    """
     mx, my = window_pos
     win_w, win_h = window_size
     
@@ -83,6 +127,8 @@ def _window_to_canvas_pos(window_pos: tuple[int, int], window_size: tuple[int, i
 
 
 def _present(canvas: pygame.Surface, window: pygame.Surface) -> None:
+    # Final "present" step: scale the fixed-size canvas to current window size.
+    # `smoothscale` is a slower but nicer-looking scaler than `scale`.
     # Stretch the canvas to fill the window (no letterboxing)
     win_size = window.get_size()
     scaled = pygame.transform.smoothscale(canvas, win_size)
@@ -116,6 +162,9 @@ TABLE_COLOR_WHEEL = (100, 50, 150)     # Purple for lucky wheel
 
 
 def _circle_rect_distance(cx: float, cy: float, rect: pygame.Rect) -> float:
+    # Small geometry helper:
+    # distance between a point (cx,cy) and the closest point on a rectangle.
+    # Used to implement "press E when close to table" interactions.
     closest_x = min(max(cx, rect.left), rect.right)
     closest_y = min(max(cy, rect.top), rect.bottom)
     dx = cx - closest_x
@@ -124,6 +173,8 @@ def _circle_rect_distance(cx: float, cy: float, rect: pygame.Rect) -> float:
 
 
 def _player_can_interact(player: Player | None, rects: list[pygame.Rect], near_px: float) -> bool:
+    # A convenience function: given a list of interaction rectangles, return
+    # True if the player is within `near_px` distance of any of them.
     if player is None:
         return False
     for r in rects:
@@ -133,6 +184,9 @@ def _player_can_interact(player: Player | None, rects: list[pygame.Rect], near_p
 
 
 class Button:
+    # Tiny UI widget used in the main menu/settings.
+    # In pygame, UI is usually "immediate mode": every frame you draw the button,
+    # and separately check if a click happened inside its rect.
     def __init__(self, rect: pygame.Rect, text: str):
         self.rect = rect
         self.text = text
@@ -154,6 +208,10 @@ class Button:
 
 
 class Slider:
+    # Another simple UI widget.
+    # This slider tracks:
+    # - a value in [min_val, max_val]
+    # - whether the mouse is currently dragging the knob
     def __init__(self, rect: pygame.Rect, min_val: int = 0, max_val: int = 100, value: int = 100):
         self.rect = rect
         self.min_val = min_val
@@ -209,6 +267,9 @@ class Slider:
 
 
 def draw_center_text(surface: pygame.Surface, text: str, y: int, font=FONT, color=WHITE):
+    # pygame text rendering is a two-step process:
+    # 1) font.render(...) creates a new Surface containing the text pixels
+    # 2) surface.blit(...) copies that text surface onto the destination surface
     surf = font.render(text, True, color)
     rect = surf.get_rect(center=(surface.get_width() // 2, y))
     surface.blit(surf, rect)
@@ -243,6 +304,12 @@ def draw_rainbow_text(surface: pygame.Surface, text: str, y: int, font=FONT, tim
 
 def draw_luckywheel_scene(surface: pygame.Surface, game_state: dict, font: pygame.font.Font) -> dict:
     """Draw and update lucky wheel game on the given surface."""
+    # Pattern used across the project:
+    # - each mini-game stores its state in a dictionary (game_state)
+    # - the draw_* function both *updates* and *draws* that mini-game
+    # - it returns the (possibly updated) state dict
+    #
+    # This is a simple alternative to making lots of classes.
     if "initialized" not in game_state:
         tokens = game_state.get("tokens", 100)
         surf_w, surf_h = surface.get_size()
@@ -324,11 +391,18 @@ def spin_luckywheel(game_state: dict) -> dict:
 
 
 async def main():
-    # Scenes: "menu" / "loading" / "game" / "roulette" / "settings"
+    # This `main()` is async for pygbag/browser compatibility.
+    # On desktop pygame you typically see a normal `def main():`.
+
+    # Scenes (a.k.a. a simple state machine). `scene` decides what input/update/draw
+    # logic runs. Switching scenes is done by assigning a new string.
+    # Examples: "menu" / "loading" / "game" / "roulette" / "settings" / ...
     scene = "menu"
     player: Player | None = None
 
     loading_elapsed = 0.0
+    # Each mini-game owns its own state dictionary.
+    # When you enter the scene we typically initialize it with {"tokens": tokens}.
     roulette_state = {}  # State for roulette game
     slotmachine_state = {}
     luckywheel_state = {}  # State for lucky wheel game
@@ -337,6 +411,7 @@ async def main():
     horsegame_state = {}  # State for horse racing game
 
     # Cocktail/Drunk effect state
+    # These variables are classic "game state": timers and flags updated every frame.
     holding_cocktail = False
     cocktail_timer = 0.0
     drunk_active = False
@@ -345,6 +420,10 @@ async def main():
     cocktail_hold_duration = 1.0  # Hold cocktail for 1 second before drunk
     
     # Dancefloor disco state
+    # The disco effect is a mix of:
+    # - state flags (was_on_dancefloor)
+    # - animation variables (disco_ball_y, timers)
+    # - music mode switching (see _enter/_leave_dancefloor_music)
     was_on_dancefloor = False
     disco_ball_y = -100  # Start above screen
     disco_ball_target_y = BASE_HEIGHT // 2 - 50
@@ -366,13 +445,16 @@ async def main():
     ]
 
     # Token currency system
+    # `tokens` is the shared currency across the hub and mini-games.
     tokens = 100  # Starting tokens
     token_timer = 0.0  # Timer for passive token income (25 tokens per minute)
     
-    # Load saved settings
+    # Load saved settings from settings.json (or defaults if missing).
     saved_settings = _load_settings()
     music_volume = saved_settings.get("music_volume", 100)  # 0-100
 
+    # `window` is the actual OS window (can be resized/fullscreen).
+    # `canvas` is where we *actually draw* each frame at BASE_WIDTH/BASE_HEIGHT.
     window = pygame.display.set_mode((BASE_WIDTH, BASE_HEIGHT), pygame.RESIZABLE)
     pygame.display.set_caption("Merge Casino")
     canvas = pygame.Surface((BASE_WIDTH, BASE_HEIGHT))
@@ -387,12 +469,19 @@ async def main():
         base_dir = str(Path.cwd())
     
     # Music playlist system
+    # pygame has two audio concepts:
+    # - `pygame.mixer.music` for streaming background music
+    # - `pygame.mixer.Sound` for short sound effects (not used here)
     music_tracks = ["bgm1.mp3", "bgm2.mp3", "bgm3.mp3", "bgm4.mp3", "bgm5.mp3", "bgm6.mp3", "bgm7.mp3"]
     current_track = None
     music_mode = "bgm"  # "bgm" (random playlist) or "disco" (dancefloor)
     
     def play_random_track():
         nonlocal current_track
+        # Nested function + `nonlocal`:
+        # `play_random_track()` is defined inside `main()` so it can share variables
+        # like `current_track` and `music_mode` without making a class.
+        # `nonlocal current_track` means "use the variable from the outer scope".
         # Only allow the playlist to change music while in bgm mode.
         # This prevents queued MUSIC_END_EVENTs from overriding dancefloor music.
         if music_mode != "bgm":
@@ -415,12 +504,16 @@ async def main():
         except Exception as e:
             print(f"Could not load music {next_track}: {e}")
     
-    # Set up music end event
+    # Set up music end event.
+    # pygame can post a custom event when the current music track ends, which lets
+    # us start the next random track in the playlist.
     MUSIC_END_EVENT = pygame.USEREVENT + 1
     pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
 
     def _enter_dancefloor_music() -> None:
         nonlocal music_mode, disco_music_playing
+        # Switch the audio system into a special "disco" mode (looping track).
+        # Note: we clear MUSIC_END_EVENT so old queued events don't fight us.
         if music_mode == "disco":
             return
         if not disco_music_tracks:
@@ -455,6 +548,7 @@ async def main():
 
     def _leave_dancefloor_music() -> None:
         nonlocal music_mode, disco_music_playing
+        # Return from disco mode back to normal playlist (bgm mode).
         if music_mode != "disco":
             return
         music_mode = "bgm"
@@ -474,7 +568,12 @@ async def main():
     # Start playing first random track
     play_random_track()
     
-    # Table size and positions (4 corners + center)
+    # Tables are defined as pygame.Rects.
+    # Rects are used for:
+    # - "interaction zones" (are you near it?)
+    # - collision checks (not heavily used here)
+    # - simple UI hit-testing
+    # Table size and positions (4 corners)
     TABLE_WIDTH = 370
     TABLE_HEIGHT = 250
     TABLE_MARGIN = 0
@@ -568,15 +667,21 @@ async def main():
     back_btn = Button(pygame.Rect(settings_panel_rect.centerx - 75, settings_panel_rect.bottom - 70, 150, 50), "Back")
     
     def is_near_table(p: Player | None, table: pygame.Rect) -> bool:
+        # Wrapper around the distance check used for "Press E" prompts.
         if p is None:
             return False
         return _circle_rect_distance(p.x, p.y, table) <= interact_near_px
 
     running = True
     while running:
+        # `dt` is "delta time": seconds since last frame.
+        # Use dt when updating movement/timers so the game speed is consistent,
+        # even if the frame rate changes.
         dt = CLOCK.tick(60) / 1000.0
         
         # Passive token income: 25 tokens every 60 seconds (works in ALL scenes)
+        # This is a common game-dev pattern: accumulate dt into a timer, and when it
+        # passes a threshold, do the periodic action and subtract the threshold.
         token_timer += dt
         if token_timer >= 60.0:
             tokens += 25
@@ -595,6 +700,7 @@ async def main():
                 higherlower_state["tokens"] = higherlower_state.get("tokens", 0) + 25
 
         # Update cocktail/drunk timers
+        # Timers are just floats in seconds that count up via dt.
         if holding_cocktail:
             cocktail_timer += dt
             if cocktail_timer >= cocktail_hold_duration:
@@ -607,11 +713,16 @@ async def main():
             if drunk_timer >= drunk_duration:
                 drunk_active = False
 
+        # Mouse position from pygame is in *window pixel* coordinates.
+        # We map it back to our fixed 900x600 canvas coordinates for UI hit-testing.
         window_mouse_pos = pygame.mouse.get_pos()
         mouse_pos = _window_to_canvas_pos(window_mouse_pos, window.get_size())
         if mouse_pos is None:
             mouse_pos = (-1, -1)
 
+        # EVENT LOOP
+        # pygame collects input/window events. You must poll them each frame.
+        # If you don't, the OS can consider your app unresponsive.
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -621,6 +732,8 @@ async def main():
                 if music_mode == "bgm":
                     play_random_track()
 
+            # Fullscreen toggle (F11 or Alt+Enter): recreate the display surface.
+            # Note: changing display mode returns a *new* window surface.
             if event.type == pygame.KEYDOWN and (
                 event.key == pygame.K_F11
                 or (event.key == pygame.K_RETURN and (event.mod & pygame.KMOD_ALT))
@@ -633,6 +746,8 @@ async def main():
                     window = pygame.display.set_mode((BASE_WIDTH, BASE_HEIGHT), pygame.RESIZABLE)
                 pygame.display.set_caption("Merge Casino")
 
+            # ESC is used as "back".
+            # Each scene decides what ESC means (return to lobby, reset state, etc.).
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 if scene == "settings":
                     scene = "menu"
@@ -668,6 +783,8 @@ async def main():
                     player = None
                     loading_elapsed = 0.0
 
+            # "E" is the interact key in the hub scenes.
+            # If you're near a table rect, we switch `scene` and create that game's state.
             if event.type == pygame.KEYDOWN and event.key == pygame.K_e:
                 if scene == "game":
                     if is_near_table(player, table_roulette):
@@ -730,10 +847,6 @@ async def main():
             if event.type == pygame.KEYDOWN and scene == "slotmachine":
                 if event.key == pygame.K_SPACE:
                     slotmachine_state = spin_slotmachine(slotmachine_state)
-                elif event.key == pygame.K_UP:
-                    slotmachine_state = change_slot_bet_amount(slotmachine_state, True)
-                elif event.key == pygame.K_DOWN:
-                    slotmachine_state = change_slot_bet_amount(slotmachine_state, False)
 
             # Lucky wheel controls
             if event.type == pygame.KEYDOWN and scene == "luckywheel":
@@ -754,12 +867,14 @@ async def main():
 
             # Settings slider event handling
             if scene == "settings":
+                # UI widgets often need to see raw events so they can manage dragging.
                 if volume_slider.handle_event(event, mouse_pos):
                     music_volume = volume_slider.value
                     pygame.mixer.music.set_volume(music_volume / 100.0)
                     _save_settings({"music_volume": music_volume})
 
             # Menu/scene mouse clicks
+            # We route the click to the active scene; this keeps scenes isolated.
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if scene == "menu":
                     if start_btn.handle_click(mouse_pos):
@@ -777,7 +892,10 @@ async def main():
                     roulette_state = handle_roulette_click(roulette_state, mouse_pos)
                 elif scene == "slotmachine":
                     btn = slotmachine_state.get("button_rect")
-                    if isinstance(btn, pygame.Rect) and btn.collidepoint(mouse_pos):
+                    lever = slotmachine_state.get("handle_rect")
+                    if (isinstance(btn, pygame.Rect) and btn.collidepoint(mouse_pos)) or (
+                        isinstance(lever, pygame.Rect) and lever.collidepoint(mouse_pos)
+                    ):
                         slotmachine_state = spin_slotmachine(slotmachine_state)
                 elif scene == "luckywheel":
                     btn = luckywheel_state.get("button_rect")
@@ -790,10 +908,13 @@ async def main():
                 elif scene == "horsegame":
                     horsegame_state = handle_horsegame_click(horsegame_state, mouse_pos)
 
-        # Draw
+        # DRAW PHASE
+        # The common pygame pattern is: clear -> draw background -> draw entities/UI.
         canvas.fill(BG)
 
-        # Get current window size for scaling backgrounds
+        # Get current window size for scaling backgrounds.
+        # (Note: we still draw on a fixed-size canvas; window size mainly matters
+        # for the final present step and for mapping mouse coordinates.)
         win_w, win_h = window.get_size()
 
         if scene == "menu":
@@ -842,6 +963,7 @@ async def main():
             back_btn.draw(canvas, mouse_pos)
 
         elif scene == "loading":
+            # Loading scene: show a screen for a fixed time before entering the lobby.
             loading_elapsed += dt
             progress = min(loading_elapsed / LOADING_DURATION_SECONDS, 1.0)
             draw_game_screen(canvas, title_font=FONT, hint_font=FONT_GAME_HINT, progress=progress, elapsed_time=loading_elapsed)
@@ -850,6 +972,7 @@ async def main():
                 player = Player((BASE_WIDTH // 2, BASE_HEIGHT // 2))
 
         elif scene == "roulette":
+            # Mini-game scenes draw themselves and return their updated state.
             roulette_state = draw_roulette_scene(canvas, roulette_state, font=FONT)
             tokens = roulette_state.get("tokens", tokens)  # Update tokens from roulette
 
@@ -885,6 +1008,8 @@ async def main():
                 player = Player((80, BASE_HEIGHT // 2))
 
             keys = pygame.key.get_pressed()
+            # Movement uses current key state (pressed or not), not discrete key events.
+            # This feels smoother for continuous movement.
             player.update(dt, keys, canvas.get_rect(), obstacles=[])
             
             # Check if player is on the dancefloor (top-right corner)
@@ -905,7 +1030,7 @@ async def main():
             
             was_on_dancefloor = on_dancefloor
             
-            # Animate disco ball lowering
+            # Animate disco ball lowering (dt-based animation)
             if disco_ball_lowering:
                 if disco_ball_y < disco_ball_target_y:
                     disco_ball_y += 150 * dt  # Lower at 150 pixels per second
@@ -941,7 +1066,8 @@ async def main():
                     end_y = ball_center_y + int(math.sin(angle) * ray_length)
                     color = disco_colors[i % len(disco_colors)]
                     
-                    # Draw semi-transparent ray using a surface
+                    # Draw semi-transparent ray using a surface.
+                    # `SRCALPHA` enables per-pixel alpha so the rays can be translucent.
                     ray_surf = pygame.Surface((BASE_WIDTH, BASE_HEIGHT), pygame.SRCALPHA)
                     pygame.draw.line(ray_surf, (*color, 80), (ball_center_x, ball_center_y), (end_x, end_y), 8)
                     canvas.blit(ray_surf, (0, 0))
@@ -1085,11 +1211,14 @@ async def main():
                 e_rect = e_surf.get_rect(center=popup.center)
                 canvas.blit(e_surf, e_rect)
 
-        # Present surface (may be post-processed)
+        # POST-PROCESS + PRESENT
+        # We sometimes apply effects (pulse/drunk) by rendering into a temporary surface.
+        # `present_canvas` starts as the normal canvas, but may be replaced.
         present_canvas = canvas
         
         # Apply disco pulse effect when on dancefloor
         if scene == "lobby2" and was_on_dancefloor:
+            # Disco pulse effect: scale slightly larger/smaller over time.
             disco_pulse_timer += dt
             # Pulse scale oscillates between 1.0 and 1.05 using sine wave
             pulse_scale = 1.0 + 0.05 * abs(math.sin(disco_pulse_timer * 12))  # 12 = pulse speed
@@ -1110,6 +1239,9 @@ async def main():
         # Important: do NOT overwrite `canvas` across frames, otherwise the tint accumulates
         # and becomes opaque (this is especially noticeable on macOS).
         if drunk_active:
+            # "Drunk" effect:
+            # 1) wave-distort the image by shifting each horizontal row by a sine offset
+            # 2) apply a green tint overlay
             drunk_canvas = pygame.Surface((BASE_WIDTH, BASE_HEIGHT)).convert()
             wave_amplitude = 8  # How far pixels shift
             wave_frequency = 0.03  # How tight the waves are
@@ -1133,11 +1265,13 @@ async def main():
 
             present_canvas = drunk_canvas
 
-        # Now always stretch the (possibly post-processed) canvas to fill the window
+        # Now always stretch the (possibly post-processed) canvas to fill the window.
+        # This is the final step users see.
         _present(present_canvas, window)
         pygame.display.flip()
         
-        # Required for pygbag - yield control back to browser
+        # Required for pygbag - yield control back to browser.
+        # In a normal desktop pygame loop you usually *don't* need this.
         await asyncio.sleep(0)
 
     pygame.quit()
