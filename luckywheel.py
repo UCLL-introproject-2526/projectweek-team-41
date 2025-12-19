@@ -1,3 +1,20 @@
+"""luckywheel.py
+
+This module implements the Lucky Wheel mini-game.
+
+How it is used by the main project:
+- `main.py` creates a `LuckyWheel` instance (or stores one inside a state dict)
+- each frame: `wheel.update()` advances animations/physics
+- each frame: `wheel.draw(surface)` renders the wheel to the given Surface
+
+Important pygame concepts you'll see here:
+- A `pygame.Surface` is an image buffer you can draw on.
+- Drawing functions (like `pygame.draw.circle`) draw pixels onto a surface.
+- `surface.blit(other_surface, pos)` copies pixels from one surface to another.
+- Many visual effects are implemented by drawing onto a temporary surface with
+    per-pixel alpha (`pygame.SRCALPHA`), then blitting it on top.
+"""
+
 import pygame
 import math
 import random
@@ -5,6 +22,8 @@ import random
 class Particle:
     """Particle class for confetti and sparkle effects"""
     def __init__(self, x, y, color, velocity_x, velocity_y, lifetime=60):
+        # Particles are tiny objects that exist for a short time.
+        # We update them every frame (position, gravity, lifetime) and draw them.
         self.x = x
         self.y = y
         self.color = color
@@ -17,6 +36,10 @@ class Particle:
         self.rotation_speed = random.randint(-10, 10)
     
     def update(self):
+        # In game-dev, motion is usually "position += velocity" each frame.
+        # This file uses fixed-per-frame updates (not dt-based) because the wheel
+        # demo runs at a capped FPS; in `main.py` the wheel is still updated once
+        # per frame, so it looks fine.
         self.x += self.velocity_x
         self.y += self. velocity_y
         self.velocity_y += 0.3  # Gravity
@@ -24,6 +47,8 @@ class Particle:
         self.rotation += self.rotation_speed
     
     def draw(self, surface):
+        # Alpha fades out as the particle approaches the end of its lifetime.
+        # `pygame.SRCALPHA` enables per-pixel alpha on a Surface.
         alpha = int(255 * (self.lifetime / self.max_lifetime))
         if alpha > 0:
             # Draw as a rotated rectangle for confetti effect
@@ -55,6 +80,9 @@ class LuckyWheel:
         self.angular_velocity = 0  # Rotation speed
         self.is_spinning = False
         self. friction = 0.98  # Deceleration factor
+
+        # Wheel rotation is represented in DEGREES, not radians.
+        # A full rotation is 360 degrees.
         
         # Alternating rich casino colors (red and black like roulette, with gold accents)
         self.colors = [
@@ -98,6 +126,8 @@ class LuckyWheel:
     
     def create_idle_sparkles(self):
         """Create sparkles that appear around the wheel when idle"""
+        # Sparkles here are stored as dictionaries (x/y/life/etc) instead of
+        # full classes. Either approach is common in small pygame projects.
         for i in range(5):
             angle = random.uniform(0, 2 * math.pi)
             distance = self.radius + random.randint(10, 40)
@@ -113,6 +143,9 @@ class LuckyWheel:
     
     def spin(self, force=None):
         """Start spinning the wheel"""
+        # You can think of `angular_velocity` like "speed" but for rotation.
+        # Each frame we do `angle += angular_velocity`, then reduce the velocity
+        # using friction so it eventually comes to a stop.
         if not self.is_spinning:
             self.is_spinning = True
             # Random spin force between 20 and 40 if not specified
@@ -125,6 +158,8 @@ class LuckyWheel:
     
     def update(self):
         """Update wheel rotation"""
+        # This is the "update" phase of a game loop.
+        # It changes the internal state so that when we draw, we see animation.
         if self.is_spinning:
             # Update angle
             self.angle += self.angular_velocity
@@ -155,6 +190,7 @@ class LuckyWheel:
                 self.determine_winner()
         
         # Update glow effect
+        # Glow is a simple oscillating value 0..100 to make the wheel "breathe".
         self.glow_intensity += self.glow_direction * 3
         if self.glow_intensity >= 100:
             self.glow_intensity = 100
@@ -164,6 +200,8 @@ class LuckyWheel:
             self.glow_direction = 1
         
         # Update particles
+        # We iterate over a COPY of the list (`self.particles[:]`) so we can
+        # safely remove items while iterating.
         for particle in self.particles[: ]:
             particle.update()
             if particle.is_dead():
@@ -180,6 +218,8 @@ class LuckyWheel:
             self.create_idle_sparkles()
         
         # Winner celebration
+        # When the wheel stops and `self.winner` is set, we start a short
+        # celebration timer and spawn extra particles.
         if self.winner and not self.is_spinning:
             self.celebration_timer += 1
             
@@ -226,6 +266,8 @@ class LuckyWheel:
     
     def determine_winner(self):
         """Determine which slot won based on the pointer position at the TOP"""
+        # Key idea: each slot covers the same angle range.
+        # If the wheel has N slots, each slot is 360/N degrees.
         degrees_per_slot = 360 / self.num_slots
         
         # The pointer is at the TOP of the wheel (straight up)
@@ -238,6 +280,14 @@ class LuckyWheel:
         # The wheel's current rotation is self.angle (clockwise)
         # So the effective angle at the top pointer is: (270 - self.angle) % 360
         
+        # pygame's coordinate system:
+        # - x increases to the right
+        # - y increases downward
+        # But for angles we still use standard math angles:
+        # - 0 degrees points right
+        # - 90 degrees points down
+        # - 180 degrees points left
+        # - 270 degrees points up
         pointer_angle = 270  # Top of the wheel in standard coordinates
         # Subtract wheel rotation to find which slot is at the pointer
         adjusted_angle = (pointer_angle - self.angle) % 360
@@ -251,13 +301,16 @@ class LuckyWheel:
     
     def draw(self, surface):
         """Draw the wheel on the surface with fancy casino effects"""
+        # This method is the "render" phase.
+        # It does NOT change game rules; it only draws the current state.
         degrees_per_slot = 360 / self.num_slots
         
         # Draw light rays from center when winning
         if self.winner and not self.is_spinning and self.celebration_timer < 60:
             self.draw_light_rays(surface)
         
-        # Draw outer glow effect
+        # The outer glow is drawn using multiple translucent circles.
+        # The loop draws larger circles first, then smaller ones on top.
         for i in range(8, 0, -1):
             glow_radius = self.radius + i * 8
             glow_alpha = int(30 * (i / 8) * (self.glow_intensity / 100))
@@ -282,7 +335,8 @@ class LuckyWheel:
             pygame.draw.circle(surface, (rim_color_value, rim_color_value, rim_color_value), 
                              (self.x, self.y), self.radius + 5 - i, 1)
         
-        # Draw each slot with 3D effect
+        # Draw each slot as a pie slice (a polygon).
+        # We approximate the arc with many points (`num_points`).
         for i in range(self.num_slots):
             start_angle = math.radians(self.angle + i * degrees_per_slot)
             end_angle = math.radians(self. angle + (i + 1) * degrees_per_slot)
@@ -338,7 +392,8 @@ class LuckyWheel:
             text_surface = font. render(prize_text, True, (255, 255, 255))
             outline_surface = font.render(prize_text, True, (0, 0, 0))
             
-            # Rotate text
+            # Rotate text to align with the slice.
+            # `pygame.transform.rotate` returns a new Surface.
             angle_deg = math.degrees(text_angle) + 90
             rotated_text = pygame.transform.rotate(text_surface, -angle_deg)
             rotated_outline = pygame.transform.rotate(outline_surface, -angle_deg)
@@ -376,7 +431,8 @@ class LuckyWheel:
                 pygame.draw.polygon(sparkle_surface, (255, 215, 0, alpha), points, 1)
                 surface.blit(sparkle_surface, (sparkle['x'] - sparkle['size'] * 2, sparkle['y'] - sparkle['size'] * 2))
         
-        # Draw particles (confetti)
+        # Draw particles (confetti).
+        # Each particle draws itself onto the wheel surface.
         for particle in self.particles:
             particle.draw(surface)
         
@@ -405,7 +461,9 @@ class LuckyWheel:
         # Draw star in center
         self.draw_center_star(surface, self.x, self.y, 18, (255, 215, 0))
         
-        # Draw pointer at the top with 3D effect
+        # Draw pointer at the top.
+        # Visually, the pointer is a triangle; logically, it represents the
+        # "winning angle" used in determine_winner().
         pointer_length = 50
         pointer_width = 20
         pointer_y_pos = self.y - self.radius - 30
