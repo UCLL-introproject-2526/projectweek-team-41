@@ -14,6 +14,7 @@ from slotmachine import draw_slotmachine_scene, spin_slotmachine, change_slot_be
 from luckywheel import LuckyWheel, draw_spin_button, draw_winner_announcement
 from blackjack import draw_blackjack_scene, handle_blackjack_click, handle_blackjack_keypress, change_blackjack_bet
 from higherlower import draw_higherlower_scene, handle_higherlower_click, handle_higherlower_keypress, change_higherlower_bet
+from horsegame import draw_horsegame_scene, handle_horsegame_click, handle_horsegame_keypress, change_horsegame_bet
 
 # Initialize Pygame
 pygame.init()
@@ -332,6 +333,7 @@ async def main():
     luckywheel_state = {}  # State for lucky wheel game
     blackjack_state = {}  # State for blackjack game
     higherlower_state = {}  # State for higher/lower game
+    horsegame_state = {}  # State for horse racing game
 
     # Cocktail/Drunk effect state
     holding_cocktail = False
@@ -645,6 +647,10 @@ async def main():
                     scene = "lobby2"
                     player = Player((BASE_WIDTH - 80, BASE_HEIGHT - 80))
                     higherlower_state = {}
+                elif scene == "horsegame":
+                    scene = "lobby2"
+                    player = Player((80, BASE_HEIGHT - 80))
+                    horsegame_state = {}
                 elif scene == "lobby2":
                     # Ensure disco stops if we leave lobby2 while it is playing.
                     _leave_dancefloor_music()
@@ -676,6 +682,10 @@ async def main():
                     if is_near_table(player, lobby2_table_bottomright):
                         scene = "higherlower"
                         higherlower_state = {"tokens": tokens}
+                    # Bottom-left: Horse Racing
+                    elif is_near_table(player, lobby2_table_bottomleft):
+                        scene = "horsegame"
+                        horsegame_state = {"tokens": tokens}
                     # Top-left: Bar stand (cocktail)
                     elif is_near_table(player, lobby2_table_topleft) and not holding_cocktail and not drunk_active:
                         holding_cocktail = True
@@ -733,6 +743,10 @@ async def main():
             if event.type == pygame.KEYDOWN and scene == "higherlower":
                 higherlower_state = handle_higherlower_keypress(higherlower_state, event.key)
 
+            # Horse Racing controls
+            if event.type == pygame.KEYDOWN and scene == "horsegame":
+                horsegame_state = handle_horsegame_keypress(horsegame_state, event.key)
+
             # Settings slider event handling
             if scene == "settings":
                 if volume_slider.handle_event(event, mouse_pos):
@@ -768,6 +782,8 @@ async def main():
                     blackjack_state = handle_blackjack_click(blackjack_state, mouse_pos)
                 elif scene == "higherlower":
                     higherlower_state = handle_higherlower_click(higherlower_state, mouse_pos)
+                elif scene == "horsegame":
+                    horsegame_state = handle_horsegame_click(horsegame_state, mouse_pos)
 
         # Draw
         canvas.fill(BG)
@@ -846,6 +862,10 @@ async def main():
         elif scene == "higherlower":
             higherlower_state = draw_higherlower_scene(canvas, higherlower_state, font=FONT)
             tokens = higherlower_state.get("tokens", tokens)
+
+        elif scene == "horsegame":
+            horsegame_state = draw_horsegame_scene(canvas, horsegame_state, font=FONT)
+            tokens = horsegame_state.get("tokens", tokens)
 
         elif scene == "lobby2":
             # Second lobby with bg2 background
@@ -953,6 +973,17 @@ async def main():
             
             # Show 'E' popup when near bottom-right table (Higher/Lower)
             if is_near_table(player, lobby2_table_bottomright):
+                popup = pygame.Rect(0, 0, 26, 26)
+                popup.center = (int(player.x), int(player.y - (player.radius + 18)))
+                popup.clamp_ip(canvas.get_rect())
+                pygame.draw.rect(canvas, (20, 20, 25), popup, border_radius=4)
+                pygame.draw.rect(canvas, (255, 255, 255), popup, width=2, border_radius=4)
+                e_surf = FONT_TIP.render("E", True, (255, 255, 255))
+                e_rect = e_surf.get_rect(center=popup.center)
+                canvas.blit(e_surf, e_rect)
+            
+            # Show 'E' popup when near bottom-left table (Horse Racing)
+            if is_near_table(player, lobby2_table_bottomleft):
                 popup = pygame.Rect(0, 0, 26, 26)
                 popup.center = (int(player.x), int(player.y - (player.radius + 18)))
                 popup.clamp_ip(canvas.get_rect())
