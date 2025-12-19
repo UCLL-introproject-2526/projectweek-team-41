@@ -726,6 +726,24 @@ async def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+
+            # Cheat: Ctrl+P gives +1000 tokens.
+            # We update both the shared `tokens` and the active mini-game state (if any)
+            # so the UI stays consistent even while inside a mini-game scene.
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_p and (event.mod & pygame.KMOD_CTRL):
+                tokens += 1000
+                if scene == "roulette" and "tokens" in roulette_state:
+                    roulette_state["tokens"] = roulette_state.get("tokens", 0) + 1000
+                elif scene == "slotmachine" and "tokens" in slotmachine_state:
+                    slotmachine_state["tokens"] = slotmachine_state.get("tokens", 0) + 1000
+                elif scene == "luckywheel" and "tokens" in luckywheel_state:
+                    luckywheel_state["tokens"] = luckywheel_state.get("tokens", 0) + 1000
+                elif scene == "blackjack" and "tokens" in blackjack_state:
+                    blackjack_state["tokens"] = blackjack_state.get("tokens", 0) + 1000
+                elif scene == "higherlower" and "tokens" in higherlower_state:
+                    higherlower_state["tokens"] = higherlower_state.get("tokens", 0) + 1000
+                elif scene == "horsegame" and "tokens" in horsegame_state:
+                    horsegame_state["tokens"] = horsegame_state.get("tokens", 0) + 1000
             
             # Play next random track when current one ends
             if event.type == MUSIC_END_EVENT:
