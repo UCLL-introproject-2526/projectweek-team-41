@@ -448,6 +448,9 @@ async def main():
     # `tokens` is the shared currency across the hub and mini-games.
     tokens = 100  # Starting tokens
     token_timer = 0.0  # Timer for passive token income (25 tokens per minute)
+
+    # Lobby 2: Bar/cocktail price
+    COCKTAIL_COST = 10
     
     # Load saved settings from settings.json (or defaults if missing).
     saved_settings = _load_settings()
@@ -828,8 +831,10 @@ async def main():
                         horsegame_state = {"tokens": tokens}
                     # Top-left: Bar stand (cocktail)
                     elif is_near_table(player, lobby2_table_topleft) and not holding_cocktail and not drunk_active:
-                        holding_cocktail = True
-                        cocktail_timer = 0.0
+                        if tokens >= COCKTAIL_COST:
+                            tokens -= COCKTAIL_COST
+                            holding_cocktail = True
+                            cocktail_timer = 0.0
 
             # Smoke emote in lobby (B key)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_b:
